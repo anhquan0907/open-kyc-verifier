@@ -1,0 +1,59 @@
+{
+    "name": "open-kyc-verifier",
+    "version": "1.0.2",
+    "description": "A web component for KYC verification using camera and face detection",
+    "main": "index.js",
+    "module": "index.js",
+    "types": "index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./index.d.ts",
+            "import": "./index.js"
+        },
+        "./react": {
+            "types": "./OpenKyc.d.ts",
+            "import": "./OpenKyc.js"
+        }
+    },
+    "files": [
+        "index.js",
+        "OpenKyc.js",
+        "index.d.ts",
+        "OpenKyc.d.ts",
+        "README.md",
+        "demo.html"
+    ],
+    "scripts": {
+        "build": "echo 'Build complete - no bundling required'",
+        "test": "echo 'No tests available'"
+    },
+    "keywords": [
+        "kyc",
+        "verification",
+        "web-component",
+        "opencv",
+        "face-detection"
+    ],
+    "author": "Ziang",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/anhquan0907/open-kyc-verifier.git"
+    },
+    "bugs": {
+        "url": "https://github.com/anhquan0907/open-kyc-verifier/issues"
+    },
+    "homepage": "https://github.com/anhquan0907/open-kyc-verifier#readme",
+    "peerDependencies": {
+        "react": ">=16.8.0",
+        "react-dom": ">=16.8.0"
+    },
+    "peerDependenciesMeta": {
+        "react": {
+            "optional": true
+        },
+        "react-dom": {
+            "optional": true
+        }
+    }
+}

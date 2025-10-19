@@ -915,4 +915,693 @@ class KycVerifier extends HTMLElement {
 }
 
 // Export the class instead of defining the custom element
+
+// Re-verification Component (Portrait only)
+class ReVerifier extends HTMLElement {
+    static get observedAttributes() {
+        return ['api-key', 'ses_id'];
+    }
+
+    constructor() {
+        super();
+        this.apiKey = '';
+        this.sesId = '';
+        this.attachShadow({ mode: 'open' });
+
+        this.API_URL = 'https://open-kyc.ziang.me/api/v3/rverif/kyc';
+        this.FACE_CASCADE_URL = 'https://open-kyc.ziang.me/Lib/v1.0/plug-in.xml';
+
+        this.cameraStream = null;
+        this.validationIntervalId = null;
+        this.isCvReady = false;
+        this.faceClassifier;
+
+        this.capturedImages = {
+            portrait: null
+        };
+        this.faceCascadeLoaded = false;
+
+        this.shadowRoot.innerHTML = `
+            <style>
+                :host {
+                    display: block;
+                    width: 100%;
+                    max-width: 400px;
+                    min-height: 50px;
+                    margin: 0 auto;
+                    background: #fff;
+                    padding: 16px;
+                    border-radius: 20px;
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+                    transition: all 0.3s ease;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    box-sizing: border-box;
+                }
+
+                /* 🌐 Mobile */
+                @media (max-width: 600px) {
+                    :host {
+                        padding: 10px;
+                        border-radius: 20px;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+                        max-width: 100%;
+                        margin: 0;
+                        min-height: 500px;
+                    }
+                }
+
+                h2 {
+                    color: #007bff;
+                    text-align: center;
+                    font-size: 1.6em;
+                    margin-top: 0;
+                    margin-bottom: 25px;
+                }
+
+                /* --- Camera/Preview Styles --- */
+                .camera-box {
+                    position: relative;
+                    width: 100%;
+                    height: 300px;
+                    margin: 15px auto 10px;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    background-color: #111;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .camera-box video, .camera-box .captured-preview {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
+                .camera-box canvas.overlay {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                }
+
+                video::-webkit-media-controls { display: none !important; }
+                video::-webkit-media-controls-enclosure { display: none !important; }
+
+                /* --- Button Styles --- */
+                .button-group {
+                    display: flex;
+                    flex-direction: row;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 10px;
+                    margin-top: 15px;
+                }
+                .action-button {
+                    padding: 14px 20px;
+                    border: none;
+                    border-radius: 20px;
+                    cursor: pointer;
+                    font-size: 16px;
+                    font-weight: bold;
+                    transition: all 0.3s ease;
+                    width: 100%;
+                }
+                .btn-primary { background-color: #007bff; color: white; }
+                .btn-primary:hover:not(:disabled) { background-color: #0056b3; }
+                .btn-success { background-color: #28a745; color: white; }
+                .btn-success:hover:not(:disabled) { background-color: #218838; }
+                .action-button:disabled { background-color: #ccc; cursor: not-allowed; opacity: 0.7; }
+
+                .capture-btn {
+                    display: block;
+                    margin: 0 auto;
+                    width: 60px;
+                    height: 60px;
+                    padding: 0;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                /* --- Validation Message Style --- */
+                .validation-message {
+                    text-align: center;
+                    padding: 12px;
+                    border-radius: 6px;
+                    font-weight: 500;
+                    margin: 5px 0;
+                    min-height: 20px;
+                    transition: all 0.3s ease;
+                    display: block;
+                }
+                .validation-message.error {
+                    color: #dc3545;
+                }
+                .validation-message.success {
+                    color: #28a745;
+                }
+
+                /* --- Result & Loading Styles --- */
+                .loading-container {
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 350px;
+                }
+                .loading-spinner {
+                    border: 5px solid #f3f3f3;
+                    border-top: 5px solid #007bff;
+                    border-radius: 50%;
+                    width: 50px;
+                    height: 50px;
+                    animation: spin 1s linear infinite;
+                    margin-bottom: 15px;
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+
+                /* --- Result Screen --- */
+                .result-screen {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    text-align: center;
+                    padding: 20px 0;
+                    min-height: 350px;
+                }
+                .result-screen h3 { font-size: 1.8em; margin: 15px 0 10px; }
+                .result-screen p { font-size: 1.1em; color: #6c757d; margin-bottom: 30px; }
+                .result-screen.success h3 { color: #28a745; }
+                .result-screen.error h3 { color: #dc3545; }
+                .result-icon { width: 100px; height: 100px; }
+            </style>
+
+            <h2>(RE-VERIFY)</h2>
+
+            <div id="content-container" class="step-content">
+            </div>
+
+            <div style="text-align: center; margin-top: 20px; font-size: 0.8em; color: #6c757d;">Powered by Ziang</div>
+        `;
+
+        this.init();
+    }
+
+    async init() {
+        // Load OpenCV if not already loaded
+        if (window.cv) {
+            this.onOpenCvReady();
+        } else {
+            // Load OpenCV.js
+            const script = document.createElement('script');
+            script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/main.js';
+            script.async = true;
+            script.onload = () => this.onOpenCvReady();
+            document.head.appendChild(script);
+        }
+    }
+
+    // Utility Functions
+    async loadFaceCascade() {
+        // Wait for cv to be ready
+        let cvReadyWait = 0;
+        while (!window.cv || typeof window.cv.FS_createDataFile !== 'function') {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            cvReadyWait++;
+            if (cvReadyWait > 50) {
+                this.faceCascadeLoaded = false;
+                return;
+            }
+        }
+        // Add cache-busting query string
+        const cascadeUrl = this.FACE_CASCADE_URL + '?v=' + Math.random().toString(36).substring(2);
+        try {
+            const response = await fetch(cascadeUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const buffer = await response.arrayBuffer();
+            const data = new Uint8Array(buffer);
+            cv.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', data, true, false, false);
+            this.faceClassifier = new cv.CascadeClassifier();
+            this.faceClassifier.load('haarcascade_frontalface_default.xml');
+            this.faceCascadeLoaded = true;
+        } catch (error) {
+            console.warn('DEBUG: fetch failed, trying XHR fallback', error);
+            // Fallback to XMLHttpRequest for mobile
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', cascadeUrl, true);
+                xhr.responseType = 'arraybuffer';
+                await new Promise((resolve, reject) => {
+                    xhr.onload = () => {
+                        if (xhr.status === 200) {
+                            const buffer = xhr.response;
+                            const data = new Uint8Array(buffer);
+                            cv.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', data, true, false, false);
+                            this.faceClassifier = new cv.CascadeClassifier();
+                            this.faceClassifier.load('haarcascade_frontalface_default.xml');
+                            this.faceCascadeLoaded = true;
+                            resolve();
+                        } else {
+                            reject(new Error('XHR status ' + xhr.status));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('XHR error'));
+                    xhr.send();
+                });
+            } catch (xhrError) {
+                this.faceCascadeLoaded = false;
+            }
+        }
+    }
+
+    async loadFaceCascadeUntilSuccess() {
+        let attempt = 0;
+        const maxAttempts = 10;
+        while (!this.faceCascadeLoaded && attempt < maxAttempts) {
+            attempt++;
+            await this.loadFaceCascade();
+            if (!this.faceCascadeLoaded) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+        }
+        if (this.faceCascadeLoaded) {
+            this.renderContent();
+        } else {
+            this.displayInitialError('Không thể tải dữ liệu nhận diện khuôn mặt. Vui lòng kiểm tra kết nối mạng hoặc thử lại trên thiết bị khác.');
+        }
+    }
+
+    onOpenCvReady() {
+        this.isCvReady = true;
+        this.renderInitialLoading();
+        this.loadFaceCascadeUntilSuccess();
+    }
+
+    renderInitialLoading() {
+        const contentContainer = this.shadowRoot.getElementById('content-container');
+        contentContainer.innerHTML = `
+            <div class="loading-container">
+                <div class="loading-spinner"></div>
+                <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Đang tải dữ liệu</p>
+            </div>`;
+    }
+
+    // Core Camera and Validation Logic
+    async startCamera(videoElementId, facingMode = 'user') {
+        try {
+            this.stopCamera();
+            this.cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            });
+            const video = this.shadowRoot.getElementById(videoElementId);
+            video.srcObject = this.cameraStream;
+            video.style.display = 'block';
+            video.style.transform = (facingMode === 'user') ? 'scaleX(-1)' : 'scaleX(1)';
+
+            await new Promise(resolve => video.onloadedmetadata = resolve);
+            this.startLiveValidation(videoElementId);
+            return true;
+        } catch (err) {
+            let message = 'Lỗi: Không thể truy cập camera. Vui lòng cấp quyền và thử lại.';
+            if (err.name === 'NotAllowedError') {
+                message = 'Truy cập camera bị chặn bởi chính sách quyền. Vui lòng kiểm tra cài đặt trình duyệt hoặc liên hệ quản trị viên trang web.';
+            }
+            this.displayInitialError(message);
+            return false;
+        }
+    }
+
+    stopCamera() {
+        if (this.cameraStream) {
+            this.cameraStream.getTracks().forEach(track => track.stop());
+            this.cameraStream = null;
+        }
+        if (this.validationIntervalId) {
+            cancelAnimationFrame(this.validationIntervalId);
+            this.validationIntervalId = null;
+        }
+    }
+
+    drawOverlay(canvasId, status = 'invalid') {
+        const canvas = this.shadowRoot.getElementById(canvasId);
+        if (!canvas || !canvas.parentElement) return;
+
+        const parent = canvas.parentElement;
+        canvas.width = parent.offsetWidth;
+        canvas.height = parent.offsetHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        switch (status) {
+            case 'valid':
+                ctx.strokeStyle = 'rgba(40, 167, 69, 0.9)';
+                break;
+            case 'invalid':
+                ctx.strokeStyle = 'rgba(220, 53, 69, 0.9)';
+                break;
+            default:
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        }
+
+        ctx.lineWidth = 4;
+        ctx.setLineDash([15, 10]);
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // Perfect circle for portrait
+        const radius = Math.min(canvas.width, canvas.height) * 0.4;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+    }
+
+    startLiveValidation(videoId) {
+        const video = this.shadowRoot.getElementById(videoId);
+        const canvasId = `${videoId.replace('Video', '')}CanvasOverlay`;
+        const validationMsg = this.shadowRoot.getElementById('validationMessage');
+        const captureBtn = this.shadowRoot.getElementById('portraitCaptureBtn');
+
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Draw initial overlay
+        this.drawOverlay(canvasId, 'invalid');
+
+        const processFrame = () => {
+            if (!this.isCvReady || !video.srcObject || video.paused || video.ended) {
+                this.validationIntervalId = requestAnimationFrame(processFrame);
+                return;
+            }
+
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            let imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            let src = cv.matFromImageData(imageData);
+
+            const result = this.validatePortrait(src);
+            const isValid = result.isValid;
+            const message = result.message;
+
+            this.drawOverlay(canvasId, isValid ? 'valid' : 'invalid');
+            validationMsg.textContent = message;
+            validationMsg.className = `validation-message ${isValid ? 'success' : 'error'}`;
+            captureBtn.disabled = !isValid;
+
+            src.delete();
+            this.validationIntervalId = requestAnimationFrame(processFrame);
+        };
+
+        this.validationIntervalId = requestAnimationFrame(processFrame);
+    }
+
+    validatePortrait(src) {
+        let gray = new cv.Mat();
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        let faces = new cv.RectVector();
+        this.faceClassifier.detectMultiScale(gray, faces, 1.1, 5, 0, new cv.Size(100, 100));
+
+        let isValid = false;
+        let message = 'Không tìm thấy khuôn mặt';
+
+        if (faces.size() === 1) {
+            const face = faces.get(0);
+
+            // Use circular validation area
+            const circleCenterX = src.cols / 2;
+            const circleCenterY = src.rows / 2;
+            const circleRadius = Math.min(src.cols, src.rows) * 0.4;
+
+            // Check if face fits within the circle
+            const faceSize = Math.max(face.width, face.height);
+            const isSizeValid = faceSize > circleRadius * 0.6;
+
+            // Check if face center is within the circle
+            const faceCenterX = face.x + face.width / 2;
+            const faceCenterY = face.y + face.height / 2;
+            const distanceFromCenter = Math.sqrt(
+                Math.pow(faceCenterX - circleCenterX, 2) +
+                Math.pow(faceCenterY - circleCenterY, 2)
+            );
+            const isCentered = distanceFromCenter < circleRadius * 0.4;
+
+            if (isSizeValid && isCentered) {
+                isValid = true;
+                message = 'Khuôn mặt hợp lệ! Sẵn sàng chụp.';
+            } else if (!isSizeValid) {
+                message = 'Vui lòng di chuyển lại gần hơn';
+            } else {
+                message = 'Giữ khuôn mặt vào giữa khung';
+            }
+
+        } else if (faces.size() > 1) {
+            message = 'Có nhiều hơn một khuôn mặt';
+        }
+
+        gray.delete(); faces.delete();
+
+        return { isValid, message };
+    }
+
+    captureImage(videoElementId) {
+        const video = this.shadowRoot.getElementById(videoElementId);
+        if (!video || !video.srcObject) return null;
+
+        const captureCanvas = document.createElement('canvas');
+        captureCanvas.width = video.videoWidth;
+        captureCanvas.height = video.videoHeight;
+        const context = captureCanvas.getContext('2d');
+
+        // Flip for portrait (selfie)
+        context.translate(captureCanvas.width, 0);
+        context.scale(-1, 1);
+
+        context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+        return captureCanvas.toDataURL('image/jpeg', 0.9);
+    }
+
+    // Event Handlers
+    handleCaptureOrRetake(videoId) {
+        if (this.capturedImages.portrait) {
+            this.capturedImages.portrait = null;
+            this.renderContent();
+        } else {
+            const imageData = this.captureImage(videoId);
+            if (!imageData) return;
+
+            this.capturedImages.portrait = imageData;
+            this.stopCamera();
+            this.renderContent();
+        }
+    }
+
+    // UI Rendering
+    renderContent() {
+        const contentContainer = this.shadowRoot.getElementById('content-container');
+        this.stopCamera();
+
+        if (this.capturedImages.portrait) {
+            // Show preview and verify button
+            contentContainer.innerHTML = `
+                <p style="text-align:center; font-weight: bold;">Xác nhận ảnh chân dung</p>
+                <div class="camera-box">
+                    <img id="portraitPreview" class="captured-preview" src="${this.capturedImages.portrait}" alt="Preview Chân dung" style="transform: scaleX(-1);">
+                </div>
+                <div class="button-group">
+                    <button type="button" class="action-button btn-secondary" onclick="this.getRootNode().host.handleCaptureOrRetake('portraitVideo')">Chụp Lại</button>
+                    <button type="button" class="action-button btn-primary" id="verifyBtn" onclick="this.getRootNode().host.executeReVerification()">✨ XÁC THỰC</button>
+                </div>`;
+        } else {
+            // Show camera for capture
+            contentContainer.innerHTML = `
+                <p style="text-align:center; font-weight: bold;">Chụp ảnh chân dung</p>
+                <p style="text-align:center; font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">Vui lòng giữ khuôn mặt trong khung tròn</p>
+                <div class="camera-box">
+                    <video id="portraitVideo" autoplay muted playsinline style="display: none;"></video>
+                    <canvas id="portraitCanvasOverlay" class="overlay"></canvas>
+                </div>
+                <div id="validationMessage" class="validation-message error"></div>
+                <div style="text-align: center; margin: 10px 0;">
+                    <button type="button" class="action-button btn-success capture-btn" id="portraitCaptureBtn" onclick="this.getRootNode().host.handleCaptureOrRetake('portraitVideo')" disabled>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
+                            <circle cx="12" cy="12" r="3" fill="white"/>
+                        </svg>
+                    </button>
+                </div>`;
+            this.startCamera('portraitVideo', 'user');
+        }
+    }
+
+    renderNoApiKeyError() {
+        const contentContainer = this.shadowRoot.getElementById('content-container');
+        contentContainer.innerHTML = `
+            <div class="result-screen error">
+                <svg class="result-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="25" fill="#FFF" stroke="#dc3545" stroke-width="2"/>
+                    <path fill="none" stroke="#dc3545" stroke-width="3" d="M16 16 36 36 M36 16 16 36" />
+                </svg>
+                <h3>Cần API Key & Session ID</h3>
+                <p>Vui lòng cung cấp api-key và ses_id attributes cho component.</p>
+                <pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-size: 12px;">&lt;re-verifier api-key="YOUR_API_KEY" ses_id="SESSION_ID"&gt;&lt;/re-verifier&gt;</pre>
+            </div>
+        `;
+    }
+
+    displayInitialError(message) {
+        const contentContainer = this.shadowRoot.getElementById('content-container');
+        contentContainer.innerHTML = `
+             <div class="result-screen error">
+                <h3>Đã xảy ra lỗi</h3>
+                <p>${message}</p>
+                <button class="action-button btn-primary" onclick="this.getRootNode().host.init()">Thử Lại</button>
+            </div>
+        `;
+    }
+
+    async executeReVerification() {
+        const contentContainer = this.shadowRoot.getElementById('content-container');
+        contentContainer.innerHTML = `
+            <div class="loading-container">
+                <div class="loading-spinner"></div>
+                <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Đang xử lý xác thực...</p>
+                <p style="text-align:center; color: var(--dark-gray);">Vui lòng không đóng trình duyệt.</p>
+            </div>`;
+
+        const cleanBase64 = (dataUrl) => dataUrl.split(',')[1];
+
+        const data = {
+            api_key: this.apiKey,
+            portrait: cleanBase64(this.capturedImages.portrait),
+            ses_id: this.sesId
+        };
+
+        try {
+            const response = await fetch(this.API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+
+            // Extract only the required fields
+            const eventDetail = {
+                verified: result.data?.verified || false,
+                success: result.success || false,
+                ses_id: result.ses_id || null,
+            };
+
+            // Dispatch custom event
+            this.dispatchEvent(new CustomEvent('kyc-verification-complete', {
+                detail: eventDetail,
+                bubbles: true,
+                composed: true
+            }));
+
+            if (response.ok && result.success && result.data && result.data.verified === true) {
+                this.displayResult(true);
+            } else {
+                const errorMessage = result.message || 'Xác thực không thành công. Dữ liệu không hợp lệ.';
+                this.displayResult(false, errorMessage);
+            }
+        } catch (error) {
+            const eventDetail = {
+                verified: false,
+                success: false,
+                ses_id: null,
+                message: `Lỗi kết nối mạng: ${error.message}`
+            };
+
+            this.dispatchEvent(new CustomEvent('kyc-verification-complete', {
+                detail: eventDetail,
+                bubbles: true,
+                composed: true
+            }));
+
+            this.displayResult(false, `Lỗi kết nối mạng: ${error.message}`);
+        }
+    }
+
+    displayResult(isSuccess, message = '') {
+        const contentContainer = this.shadowRoot.getElementById('content-container');
+
+        const successHTML = `
+            <div class="result-screen success">
+                <svg class="result-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="25" fill="white" stroke="var(--success-color)" stroke-width="2"/>
+                    <path fill="var(--success-color)" d="M14.1 27.2l7.1 7.2 16.7-16.8L36.6 16 21.2 31.4l-5.7-5.7z"/>
+                </svg>
+                <h3>Xác Thực Thành Công!</h3>
+                <p>Quá trình xác thực lại đã hoàn tất.</p>
+            </div>`;
+
+        const errorHTML = `
+            <div class="result-screen error">
+                 <svg class="result-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                      <circle cx="26" cy="26" r="25" fill="#FFF" stroke="var(--error-color)" stroke-width="2"/>
+                      <path fill="none" stroke="var(--error-color)" stroke-width="3" d="M16 16 36 36 M36 16 16 36" />
+                 </svg>
+                <h3>Xác Thực Thất Bại</h3>
+                <p>Vui lòng thực hiện lại.</p>
+                <p>${message}</p>
+                <button class="action-button btn-primary" onclick="this.getRootNode().host.resetProcess()">Thử Lại</button>
+            </div>`;
+
+        contentContainer.innerHTML = isSuccess ? successHTML : errorHTML;
+    }
+
+    resetProcess() {
+        this.capturedImages.portrait = null;
+        this.renderContent();
+    }
+
+    connectedCallback() {
+        // Ensure attributes are read when element is connected
+        this.apiKey = this.getAttribute('api-key') || '';
+        this.sesId = this.getAttribute('ses_id') || '';
+
+        // Only render if both api-key and ses_id are provided
+        if (this.apiKey && this.sesId) {
+            this.renderInitialLoading();
+        } else {
+            this.renderNoApiKeyError();
+        }
+    }
+
+    disconnectedCallback() {
+        this.stopCamera();
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (name === 'api-key') {
+            this.apiKey = newValue || '';
+        } else if (name === 'ses_id') {
+            this.sesId = newValue || '';
+        }
+
+        // Re-render based on new attribute values
+        if (this.apiKey && this.sesId) {
+            this.renderInitialLoading();
+        } else {
+            this.renderNoApiKeyError();
+        }
+    }
+}
+
+// Export the classes
+export { KycVerifier, ReVerifier };
 export default KycVerifier;

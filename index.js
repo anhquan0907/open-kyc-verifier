@@ -816,7 +816,8 @@ class KycVerifier extends HTMLElement {
             // Extract only the required fields
             const eventDetail = {
                 verified: result.data?.verified || false,
-                success: result.success || false
+                success: result.success || false,
+                ses_id: result.ses_id || null,
             };
 
             // Dispatch custom event
@@ -1502,7 +1503,6 @@ class ReVerifier extends HTMLElement {
             const eventDetail = {
                 verified: result.data?.verified || false,
                 success: result.success || false,
-                ses_id: result.ses_id || null,
             };
 
             // Dispatch custom event

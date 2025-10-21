@@ -2,55 +2,57 @@
 
 A web component and React wrapper for KYC (Know Your Customer) verification using camera capture and OpenCV.js face detection. Includes both full KYC verification and re-verification components.
 
+**Latest Version: 3.7.11** - Includes SSR compatibility fixes for Next.js and other server-side rendering frameworks.
+
 ## Installation
 
 ```bash
 npm install open-kyc-verifier
 ```
 
-## Updating
+## Updating to Version 3.7.11
 
-To update to the latest version of the library:
+Version 3.7.11 includes critical fixes for Server-Side Rendering (SSR) compatibility, especially for Next.js applications. If you're experiencing build errors related to `HTMLElement` or module imports, update immediately:
+
+```bash
+npm install open-kyc-verifier@3.7.11
+```
+
+Or update to the latest:
 
 ```bash
 npm update open-kyc-verifier
 ```
 
-Or install a specific version:
-
-```bash
-npm install open-kyc-verifier@latest
-```
-
-To check your current installed version:
+To check your current version:
 
 ```bash
 npm list open-kyc-verifier
 ```
 
-Check the [npm package page](https://www.npmjs.com/package/open-kyc-verifier) for the latest version and changelog.
+## SSR Compatibility
+
+This library is now fully compatible with Server-Side Rendering frameworks like Next.js. The components safely handle browser-only APIs and can be used in both client and server environments without build errors.
 
 ## Usage
 
-Below are examples for how to use the package in React/Next.js and in plain JavaScript, plus how to provide the API key securely via environment variables.
+### Get an API Key
 
-### Get an API key
-
-To use the service you need an API key. Register for an account and obtain your API key at:
+To use the service, you need an API key. Register for an account and obtain your API key at:
 
 https://open-kyc.ziang.me
 
-After registration, copy the provided API key and store it in your application's environment variables (example below uses Next.js `.env.local`).
+After registration, store the API key securely in your application's environment variables.
 
-### 1) Next.js / React (recommended)
+### 1) Next.js / React (Recommended)
 
-Create a `.env.local` (or `.env`) at your project root and add your public API key:
+For Next.js, create a `.env.local` file in your project root:
 
 ```
 NEXT_PUBLIC_API_KEY=your_api_key_here
 ```
 
-Example Next.js page (client component) that uses the React wrappers:
+Example Next.js page (client component):
 
 ```tsx
 'use client';
@@ -58,7 +60,7 @@ Example Next.js page (client component) that uses the React wrappers:
 import { useState } from 'react';
 import { OpenKyc, ReKyc } from 'open-kyc-verifier/react';
 
-export default function Page() {
+export default function KycPage() {
     const [result, setResult] = useState<any | null>(null);
     const [sessionId, setSessionId] = useState<string>('');
 
@@ -66,7 +68,7 @@ export default function Page() {
         setResult(result);
         if (result.verified) {
             console.log('✅ KYC verification successful!');
-            // 🔑 QUAN TRỌNG: Lưu trữ ses_id để sử dụng cho ReKyc sau này
+            // 🔑 IMPORTANT: Store ses_id for future ReKyc
             setSessionId(result.ses_id || '');
         } else {
             console.log('❌ KYC verification failed');
@@ -96,17 +98,17 @@ export default function Page() {
                     onVerificationComplete={handleReVerification}
                 />
             )}
-            
+
             {!process.env.NEXT_PUBLIC_API_KEY && (
-                <div className="mt-4 p-3 bg-yellow-800 text-yellow-100 rounded">
+                <div className="mt-4 p-3 bg-yellow-100 text-yellow-800 rounded">
                     <strong>Warning:</strong> NEXT_PUBLIC_API_KEY is not set. The verifier will be unauthenticated.
                 </div>
             )}
-            
+
             {result && (
-                <div>
+                <div className="mt-4">
                     <h3>Verification Result:</h3>
-                    <pre>{JSON.stringify(result, null, 2)}</pre>
+                    <pre className="bg-gray-100 p-2 rounded">{JSON.stringify(result, null, 2)}</pre>
                 </div>
             )}
         </div>
@@ -114,12 +116,10 @@ export default function Page() {
 }
 ```
 
-Notes:
-- Make sure the page is a client component (Next 13+ / app router) or used inside a client-side React tree because the verifier uses browser APIs (camera, WebAssembly).
-- Use `NEXT_PUBLIC_` prefix (or your framework's public env convention) so the value is injectible into client-side code.
-- **Quan trọng**: Luôn lưu trữ `ses_id` từ kết quả OpenKyc thành công để sử dụng cho ReKyc. `ses_id` là khóa để truy cập dữ liệu xác thực đã lưu.
-- `OpenKyc` thực hiện xác thực đầy đủ (thẻ ID + selfie) và trả về `ses_id`.
-- `ReKyc` chỉ cần selfie và `ses_id` để xác thực lại nhanh chóng.
+**Important Notes for Next.js:**
+- Use `'use client'` directive since the component requires browser APIs
+- The library is SSR-safe and won't cause build errors
+- Store `ses_id` from successful verification for re-verification
 
 ### 2) Vanilla JavaScript / Web Component
 
@@ -171,82 +171,69 @@ document.querySelector('re-verifier')?.addEventListener('kyc-verification-comple
 ## Components Overview
 
 ### OpenKyc (Full KYC Verification)
-**Mục đích**: Xác thực đầy đủ giữa khuôn mặt và thẻ ID (Know Your Customer).
-
-**Quy trình**:
-- Chụp ảnh mặt trước thẻ ID
-- Chụp ảnh chân dung (selfie)
-- So sánh khuôn mặt trên thẻ với khuôn mặt trong ảnh selfie
-- Xác thực tính hợp lệ của thông tin
-
-**Kết quả**: Trả về kết quả xác thực và `ses_id` (session ID) để sử dụng cho việc xác thực lại.
-
-**Khi nào sử dụng**: Lần đầu tiên xác thực khách hàng, khi cần thu thập và xác thực đầy đủ thông tin cá nhân.
+- **Purpose**: Complete identity verification with ID card and facial matching
+- **Process**: Capture ID card photo + selfie, compare faces
+- **Returns**: Verification result + `ses_id` for future re-verification
+- **Use when**: First-time customer verification
 
 ### ReKyc (Re-verification)
-**Mục đích**: Xác thực lại khuôn mặt dựa trên dữ liệu đã được xác thực đúng trước đó, không cần chụp thẻ ID nữa.
+- **Purpose**: Quick verification using previously stored facial data
+- **Process**: Capture selfie only, compare with stored data using `ses_id`
+- **Returns**: Verification result
+- **Use when**: Re-authenticating existing verified users
 
-**Quy trình**:
-- Yêu cầu `ses_id` từ lần xác thực thành công trước đó (từ OpenKyc)
-- Chỉ chụp ảnh chân dung (selfie)
-- So sánh khuôn mặt với dữ liệu khuôn mặt đã lưu từ lần xác thực đầu tiên
-- Xác thực nhanh chóng
+### Session ID (`ses_id`) Management
+- **Always store `ses_id`** from successful OpenKyc verification
+- Use `ses_id` for ReKyc operations
+- Treat `ses_id` as sensitive data - store securely
+- If `ses_id` is lost, user must complete full OpenKyc again
 
-**Kết quả**: Trả về kết quả xác thực lại.
+## API Reference
 
-**Khi nào sử dụng**: Khi cần xác thực lại danh tính của khách hàng đã được xác thực trước đó (ví dụ: đăng nhập lại, xác thực giao dịch, v.v.).
+### OpenKyc Props
+- `apiKey` (string, required): Your API key
+- `onVerificationComplete` (function): Callback for React usage
 
-### Lưu ý quan trọng về Session ID
-- **Luôn lưu trữ `ses_id`** nhận được từ OpenKyc thành công để sử dụng cho ReKyc
-- `ses_id` là khóa duy nhất để truy cập dữ liệu xác thực đã lưu
-- Không chia sẻ `ses_id` và bảo mật nó như thông tin nhạy cảm
-- Nếu mất `ses_id`, người dùng sẽ cần thực hiện lại quy trình OpenKyc đầy đủ
+### ReKyc Props
+- `apiKey` (string, required): Your API key
+- `sesId` (string, required): Session ID from previous verification
+- `onVerificationComplete` (function): Callback for React usage
 
-## Requirements & behavior
+### Web Component Attributes
+- `api-key`: Your API key
+- `ses_id`: Session ID (for re-verifier only)
 
-- OpenCV.js will be loaded automatically by the component from `https://open-kyc.ziang.me/Lib/v1.0/js/main.js` if not already present on the page.
-- The component needs camera access (getUserMedia). Production environments require HTTPS for camera access.
-- The component uploads image data to the server endpoint defined in the component. Ensure you trust the endpoint and use HTTPS in production.
+## Requirements
 
-## Publishing to npm (quick checklist)
-
-1. Make sure you have an npm account and are logged in locally:
-
-```powershell
-npm login
-```
-
-2. Verify which files will be published:
-
-```powershell
-npm publish --dry-run
-```
-
-3. Publish the package:
-
-```powershell
-npm publish
-```
-
-If the package name is scoped (e.g. `@yourname/open-kyc-verifier`) use:
-
-```powershell
-npm publish --access public
-```
-
-4. After publishing, check the package page on https://www.npmjs.com/
+- Modern browser with camera support
+- HTTPS for camera access in production
+- OpenCV.js loaded automatically from CDN
+- Internet connection for API calls
 
 ## Troubleshooting
 
-- If publish fails because the package name is taken, pick a new unique `name` in `package.json` or use a scope.
-- If your project uses CommonJS consumers, note this package is ESM. Consider adding an interop build if needed.
-- If OpenCV fails to load due to CSP or network restrictions, host the script on a domain allowed by your app or bundle a compatible OpenCV build.
+### Build Errors
+- Update to version 3.7.11 or later for SSR compatibility
+- Ensure you're using client components in Next.js
+
+### Camera Issues
+- Grant camera permissions
+- Use HTTPS in production
+- Check browser compatibility
+
+### API Issues
+- Verify API key is correct
+- Check network connectivity
+- Ensure HTTPS endpoint usage
 
 ## Privacy & Security
 
-- The component sends image data to a remote API endpoint. Ensure you have permission to transmit user images and that the endpoint uses HTTPS and appropriate privacy policies.
+- Images are sent to remote API endpoints
+- Use HTTPS and ensure compliance with privacy regulations
+- Store session IDs securely
+- Obtain user consent for image capture
 
-## License & Copyright
+## License
 
 MIT
 

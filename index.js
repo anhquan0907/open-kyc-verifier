@@ -1,4 +1,4 @@
-const HTMLElement = typeof window !== 'undefined' ? window.HTMLElement : class {};
+const HTMLElement = typeof window !== 'undefined' ? window.HTMLElement : class { };
 
 let KycVerifier, ReVerifier;
 

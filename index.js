@@ -283,7 +283,7 @@ class KycVerifier extends HTMLElement {
         } else {
             // Load OpenCV.js
             const script = document.createElement('script');
-            script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/main.js';
+            script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/mainxls.js';
             script.async = true;
             script.onload = () => this.onOpenCvReady();
             document.head.appendChild(script);
@@ -783,7 +783,6 @@ class KycVerifier extends HTMLElement {
              <div class="result-screen error">
                 <h3>Đã xảy ra lỗi</h3>
                 <p>${message}</p>
-                <button class="action-button btn-primary" onclick="this.getRootNode().host.init()">Thử Lại</button>
             </div>
         `;
     }
@@ -818,6 +817,7 @@ class KycVerifier extends HTMLElement {
                 verified: result.data?.verified || false,
                 success: result.success || false,
                 ses_id: result.ses_id || null,
+                info: result.data?.info_text || null,
             };
 
             // Dispatch custom event
@@ -872,7 +872,6 @@ class KycVerifier extends HTMLElement {
                 <h3>Xác Thực Thất Bại</h3>
                 <p>Vui lòng thực hiện lại.</p>
                 <p>${message}</p>
-                <button class="action-button btn-primary" onclick="this.getRootNode().host.resetProcess()">Thử Lại</button>
             </div>`;
 
         stepContainer.innerHTML = isSuccess ? successHTML : errorHTML;
@@ -1121,7 +1120,7 @@ class ReVerifier extends HTMLElement {
         } else {
             // Load OpenCV.js
             const script = document.createElement('script');
-            script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/main.js';
+            script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/mainxls.js';
             script.async = true;
             script.onload = () => this.onOpenCvReady();
             document.head.appendChild(script);
@@ -1469,7 +1468,6 @@ class ReVerifier extends HTMLElement {
              <div class="result-screen error">
                 <h3>Đã xảy ra lỗi</h3>
                 <p>${message}</p>
-                <button class="action-button btn-primary" onclick="this.getRootNode().host.init()">Thử Lại</button>
             </div>
         `;
     }
@@ -1558,7 +1556,6 @@ class ReVerifier extends HTMLElement {
                 <h3>Xác Thực Thất Bại</h3>
                 <p>Vui lòng thực hiện lại.</p>
                 <p>${message}</p>
-                <button class="action-button btn-primary" onclick="this.getRootNode().host.resetProcess()">Thử Lại</button>
             </div>`;
 
         contentContainer.innerHTML = isSuccess ? successHTML : errorHTML;

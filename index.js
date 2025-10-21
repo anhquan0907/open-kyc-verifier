@@ -1680,5 +1680,4 @@ ReVerifier = class extends HTMLElement {
     }
 }
 
-export { KycVerifier, ReVerifier };
-export default KycVerifier;
+module.exports = { KycVerifier, ReVerifier, default: KycVerifier };

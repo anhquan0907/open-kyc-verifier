@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import KycVerifier, { ReVerifier } from './index.js';
+import KycVerifier, { ReVerifier } from './index.mjs';
 
 const OpenKyc = ({
   apiKey,

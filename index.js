@@ -1,7 +1,8 @@
+const HTMLElement = typeof window !== 'undefined' ? window.HTMLElement : class {};
+
 let KycVerifier, ReVerifier;
 
-if (typeof window !== 'undefined') {
-    KycVerifier = class extends HTMLElement {
+KycVerifier = class extends HTMLElement {
     static get observedAttributes() {
         return ['api-key'];
     }

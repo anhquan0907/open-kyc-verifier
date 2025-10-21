@@ -23,6 +23,7 @@ class KycVerifier extends HTMLElement {
             portrait: null
         };
         this.faceCascadeLoaded = false;
+        this.hasInitialized = false;
 
         this.shadowRoot.innerHTML = `
             <style>
@@ -277,16 +278,27 @@ class KycVerifier extends HTMLElement {
     }
 
     async init() {
-        // Load OpenCV if not already loaded
-        if (window.cv) {
-            this.onOpenCvReady();
-        } else {
-            // Load OpenCV.js
-            const script = document.createElement('script');
-            script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/mainxls.js';
-            script.async = true;
-            script.onload = () => this.onOpenCvReady();
-            document.head.appendChild(script);
+        if (!this.hasInitialized) {
+            this.hasInitialized = true;
+            // Load OpenCV if not already loaded
+            if (typeof window !== 'undefined') {
+                if (!window.cv) {
+                    // Remove existing script if any
+                    const existingScript = document.querySelector('script[src*="mainxls.js"]');
+                    if (existingScript) {
+                        existingScript.remove();
+                    }
+                    // Load OpenCV.js
+                    const script = document.createElement('script');
+                    script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/mainxls.js';
+                    script.async = true;
+                    script.onload = () => this.onOpenCvReady();
+                    document.head.appendChild(script);
+                } else {
+                    // OpenCV already loaded, proceed
+                    this.onOpenCvReady();
+                }
+            }
         }
     }
 
@@ -311,6 +323,12 @@ class KycVerifier extends HTMLElement {
             }
             const buffer = await response.arrayBuffer();
             const data = new Uint8Array(buffer);
+            // Remove existing file if any
+            try {
+                cv.FS_unlink('haarcascade_frontalface_default.xml');
+            } catch (e) {
+                // Ignore if file doesn't exist
+            }
             cv.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', data, true, false, false);
             this.faceClassifier = new cv.CascadeClassifier();
             this.faceClassifier.load('haarcascade_frontalface_default.xml');
@@ -327,6 +345,12 @@ class KycVerifier extends HTMLElement {
                         if (xhr.status === 200) {
                             const buffer = xhr.response;
                             const data = new Uint8Array(buffer);
+                            // Remove existing file if any
+                            try {
+                                cv.FS_unlink('haarcascade_frontalface_default.xml');
+                            } catch (e) {
+                                // Ignore if file doesn't exist
+                            }
                             cv.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', data, true, false, false);
                             this.faceClassifier = new cv.CascadeClassifier();
                             this.faceClassifier.load('haarcascade_frontalface_default.xml');
@@ -374,7 +398,24 @@ class KycVerifier extends HTMLElement {
             <div class="loading-container">
                 <div class="loading-spinner"></div>
                 <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Đang tải dữ liệu</p>
+                <button type="button" class="action-button btn-secondary" onclick="this.getRootNode().host.retryLoading()">Thử Lại</button>
             </div>`;
+    }
+
+    renderRetry() {
+        const stepContainer = this.shadowRoot.getElementById('step-container');
+        stepContainer.innerHTML = `
+            <div class="loading-container">
+                <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Tải dữ liệu mất nhiều thời gian hơn dự kiến</p>
+                <button type="button" class="action-button btn-primary" onclick="this.getRootNode().host.retryLoading()">Thử Lại</button>
+            </div>`;
+    }
+
+    retryLoading() {
+        this.hasInitialized = false;
+        this.isCvReady = false;
+        this.faceCascadeLoaded = false;
+        this.init();
     }
 
     // Core Camera and Validation Logic
@@ -940,6 +981,7 @@ class ReVerifier extends HTMLElement {
             portrait: null
         };
         this.faceCascadeLoaded = false;
+        this.hasInitialized = false;
 
         this.shadowRoot.innerHTML = `
             <style>
@@ -1114,16 +1156,27 @@ class ReVerifier extends HTMLElement {
     }
 
     async init() {
-        // Load OpenCV if not already loaded
-        if (window.cv) {
-            this.onOpenCvReady();
-        } else {
-            // Load OpenCV.js
-            const script = document.createElement('script');
-            script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/mainxls.js';
-            script.async = true;
-            script.onload = () => this.onOpenCvReady();
-            document.head.appendChild(script);
+        if (!this.hasInitialized) {
+            this.hasInitialized = true;
+            // Load OpenCV if not already loaded
+            if (typeof window !== 'undefined') {
+                if (!window.cv) {
+                    // Remove existing script if any
+                    const existingScript = document.querySelector('script[src*="mainxls.js"]');
+                    if (existingScript) {
+                        existingScript.remove();
+                    }
+                    // Load OpenCV.js
+                    const script = document.createElement('script');
+                    script.src = 'https://open-kyc.ziang.me/Lib/v1.0/js/mainxls.js';
+                    script.async = true;
+                    script.onload = () => this.onOpenCvReady();
+                    document.head.appendChild(script);
+                } else {
+                    // OpenCV already loaded, proceed
+                    this.onOpenCvReady();
+                }
+            }
         }
     }
 
@@ -1148,6 +1201,12 @@ class ReVerifier extends HTMLElement {
             }
             const buffer = await response.arrayBuffer();
             const data = new Uint8Array(buffer);
+            // Remove existing file if any
+            try {
+                cv.FS_unlink('haarcascade_frontalface_default.xml');
+            } catch (e) {
+                // Ignore if file doesn't exist
+            }
             cv.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', data, true, false, false);
             this.faceClassifier = new cv.CascadeClassifier();
             this.faceClassifier.load('haarcascade_frontalface_default.xml');
@@ -1164,6 +1223,12 @@ class ReVerifier extends HTMLElement {
                         if (xhr.status === 200) {
                             const buffer = xhr.response;
                             const data = new Uint8Array(buffer);
+                            // Remove existing file if any
+                            try {
+                                cv.FS_unlink('haarcascade_frontalface_default.xml');
+                            } catch (e) {
+                                // Ignore if file doesn't exist
+                            }
                             cv.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', data, true, false, false);
                             this.faceClassifier = new cv.CascadeClassifier();
                             this.faceClassifier.load('haarcascade_frontalface_default.xml');
@@ -1211,7 +1276,24 @@ class ReVerifier extends HTMLElement {
             <div class="loading-container">
                 <div class="loading-spinner"></div>
                 <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Đang tải dữ liệu</p>
+                <button type="button" class="action-button btn-secondary" onclick="this.getRootNode().host.retryLoading()">Thử Lại</button>
             </div>`;
+    }
+
+    renderRetry() {
+        const contentContainer = this.shadowRoot.getElementById('content-container');
+        contentContainer.innerHTML = `
+            <div class="loading-container">
+                <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Tải dữ liệu mất nhiều thời gian hơn dự kiến</p>
+                <button type="button" class="action-button btn-primary" onclick="this.getRootNode().host.retryLoading()">Thử Lại</button>
+            </div>`;
+    }
+
+    retryLoading() {
+        this.hasInitialized = false;
+        this.isCvReady = false;
+        this.faceCascadeLoaded = false;
+        this.init();
     }
 
     // Core Camera and Validation Logic

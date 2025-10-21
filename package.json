@@ -2,6 +2,7 @@
     "name": "open-kyc-verifier",
     "version": "3.7.7",
     "description": "A web component and React wrapper for KYC verification and re-verification using camera and face detection",
+    "type": "module",
     "main": "index.js",
     "types": "index.d.ts",
     "exports": {

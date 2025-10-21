@@ -1,6 +1,5 @@
-const React = require('react');
-const { useEffect, useRef, useState } = React;
-const { KycVerifier, ReVerifier } = require('./index.js');
+import React, { useEffect, useRef, useState } from 'react';
+import { KycVerifier, ReVerifier } from './index.js';
 
 const OpenKyc = ({
   apiKey,
@@ -147,4 +146,4 @@ const ReKyc = ({
   );
 };
 
-module.exports = { OpenKyc, ReKyc };
+export { OpenKyc, ReKyc };

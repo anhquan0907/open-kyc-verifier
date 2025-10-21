@@ -7,11 +7,11 @@
     "exports": {
         ".": {
             "types": "./index.d.ts",
-            "require": "./index.js"
+            "import": "./index.js"
         },
         "./react": {
             "types": "./OpenKyc.d.ts",
-            "require": "./OpenKyc.js"
+            "import": "./OpenKyc.js"
         }
     },
     "files": [

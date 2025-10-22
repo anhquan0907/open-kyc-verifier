@@ -402,6 +402,8 @@ KycVerifier = class extends HTMLElement {
             <div class="loading-container">
                 <div class="loading-spinner"></div>
                 <p style="text-align:center; font-weight: bold; font-size: 1.1em; color: #007bff;">Đang tải dữ liệu</p>
+                <p style="text-align:center; font-size: 0.8em; color: #6c757d; margin-top: 10px;">Nếu camera không hoạt động, hãy thử nút dưới đây:</p>
+                <button type="button" class="action-button btn-secondary" onclick="this.getRootNode().host.requestCameraPermission().then(() => { this.getRootNode().host.renderStep(); }).catch(err => { console.error('Permission test failed:', err); alert('Camera permission failed. Check browser settings.'); })" style="margin-top: 10px; font-size: 12px; padding: 8px 16px;">Test Camera Permission</button>
             </div>`;
     }
 
@@ -491,9 +493,9 @@ KycVerifier = class extends HTMLElement {
             } else if (err.message === 'PERMISSION_DENIED') {
                 message = 'Quyền truy cập camera đã bị từ chối trong cài đặt trình duyệt. Vui lòng:\n1. Kiểm tra cài đặt quyền camera\n2. Refresh trang và thử lại\n3. Kiểm tra Permissions Policy trong HTML';
             } else if (err.name === 'NotAllowedError') {
-                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong thiết bị\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera\n4. Trên mobile: Kiểm tra Permissions Policy header';
+                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Nhấp vào biểu tượng camera trong thanh địa chỉ trình duyệt\n2. Chọn "Allow" khi được hỏi\n3. Kiểm tra cài đặt camera trong Windows Settings > Privacy & security > Camera\n4. Đảm bảo camera không bị chặn bởi antivirus\n5. Thử refresh trang và thử lại';
             } else if (err.name === 'NotFoundError') {
-                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart thiết bị\n4. Trên mobile: Cho phép truy cập camera trong cài đặt';
+                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera trong Device Manager\n3. Thử restart máy tính\n4. Kiểm tra Windows Camera app có hoạt động không';
             } else if (err.name === 'NotReadableError') {
                 message = 'Camera đang được sử dụng bởi ứng dụng khác hoặc bị lỗi hardware.';
             } else if (err.name === 'OverconstrainedError') {
@@ -1015,15 +1017,20 @@ KycVerifier = class extends HTMLElement {
         this.stopCamera();
     }
 
-    attributeChangedCallback(name, oldValue, newValue) {
-        if (name === 'api-key') {
-            this.apiKey = newValue || '';
-            // Re-render based on new api-key value
-            if (this.apiKey) {
-                this.renderInitialLoading();
-            } else {
-                this.renderNoApiKeyError();
-            }
+    // Add a method to manually request camera permission (for debugging Windows issues)
+    async requestCameraPermission() {
+        try {
+            console.log('Manually requesting camera permission...');
+            const testStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: 640, height: 480 },
+                audio: false
+            });
+            console.log('Permission granted, stopping test stream');
+            testStream.getTracks().forEach(track => track.stop());
+            return true;
+        } catch (err) {
+            console.error('Manual permission request failed:', err);
+            throw err;
         }
     }
 }
@@ -1425,9 +1432,9 @@ ReVerifier = class extends HTMLElement {
             } else if (err.message === 'PERMISSION_DENIED') {
                 message = 'Quyền truy cập camera đã bị từ chối trong cài đặt trình duyệt. Vui lòng:\n1. Kiểm tra cài đặt quyền camera\n2. Refresh trang và thử lại\n3. Kiểm tra Permissions Policy trong HTML';
             } else if (err.name === 'NotAllowedError') {
-                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong thiết bị\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera\n4. Trên mobile: Kiểm tra Permissions Policy header';
+                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Nhấp vào biểu tượng camera trong thanh địa chỉ trình duyệt\n2. Chọn "Allow" khi được hỏi\n3. Kiểm tra cài đặt camera trong Windows Settings > Privacy & security > Camera\n4. Đảm bảo camera không bị chặn bởi antivirus\n5. Thử refresh trang và thử lại';
             } else if (err.name === 'NotFoundError') {
-                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart thiết bị\n4. Trên mobile: Cho phép truy cập camera trong cài đặt';
+                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera trong Device Manager\n3. Thử restart máy tính\n4. Kiểm tra Windows Camera app có hoạt động không';
             } else if (err.name === 'NotReadableError') {
                 message = 'Camera đang được sử dụng bởi ứng dụng khác hoặc bị lỗi hardware.';
             } else if (err.name === 'OverconstrainedError') {

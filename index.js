@@ -820,6 +820,7 @@ KycVerifier = class extends HTMLElement {
         `;
     }
 
+
     displayInitialError(message) {
         const stepContainer = this.shadowRoot.getElementById('step-container');
         stepContainer.innerHTML = `
@@ -1583,6 +1584,7 @@ ReVerifier = class extends HTMLElement {
             const eventDetail = {
                 verified: result.data?.verified || false,
                 success: result.success || false,
+                ses_id: result.ses_id || null,
             };
 
             // Dispatch custom event
@@ -1681,4 +1683,7 @@ ReVerifier = class extends HTMLElement {
     }
 }
 
-module.exports = { KycVerifier, ReVerifier, default: KycVerifier };
+module.exports = {
+    KycVerifier, ReVerifier, default: Kyc
+
+};

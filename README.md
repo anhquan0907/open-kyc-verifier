@@ -2,7 +2,7 @@
 
 A web component and React wrapper for KYC (Know Your Customer) verification using camera capture and OpenCV.js face detection. Includes both full KYC verification and re-verification components.
 
-**Latest Version: 3.7.11** - Includes SSR compatibility fixes for Next.js and other server-side rendering frameworks.
+**Latest Version: 3.7.13** - Includes SSR compatibility fixes and export corrections for Next.js and other server-side rendering frameworks.
 
 ## Installation
 
@@ -10,12 +10,12 @@ A web component and React wrapper for KYC (Know Your Customer) verification usin
 npm install open-kyc-verifier
 ```
 
-## Updating to Version 3.7.11
+## Updating to Version 3.7.13
 
-Version 3.7.11 includes critical fixes for Server-Side Rendering (SSR) compatibility, especially for Next.js applications. If you're experiencing build errors related to `HTMLElement` or module imports, update immediately:
+Version 3.7.13 includes critical fixes for Server-Side Rendering (SSR) compatibility and corrects export issues, especially for Next.js applications. If you're experiencing build errors related to `HTMLElement`, `Kyc is not defined`, or module imports, update immediately:
 
 ```bash
-npm install open-kyc-verifier@3.7.11
+npm install open-kyc-verifier@3.7.13
 ```
 
 Or update to the latest:

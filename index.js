@@ -436,14 +436,31 @@ KycVerifier = class extends HTMLElement {
 
     async startCamera(videoElementId, facingMode = 'environment') {
         try {
+            // Check if we're on HTTPS or localhost
+            const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (!isSecure) {
+                throw new Error('HTTPS_REQUIRED');
+            }
+
+            // Check if mediaDevices is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('MEDIA_DEVICES_NOT_SUPPORTED');
+            }
+
             this.stopCamera();
-            this.cameraStream = await navigator.mediaDevices.getUserMedia({
+
+            // Try to get camera with specific constraints for Windows compatibility
+            const constraints = {
                 video: {
                     facingMode,
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
-                }
-            });
+                    width: { ideal: 1920, min: 640 },
+                    height: { ideal: 1080, min: 480 },
+                    frameRate: { ideal: 30, min: 15 }
+                },
+                audio: false
+            };
+
+            this.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
             const video = this.shadowRoot.getElementById(videoElementId);
             video.srcObject = this.cameraStream;
             video.style.display = 'block';
@@ -453,10 +470,48 @@ KycVerifier = class extends HTMLElement {
             this.startLiveValidation(videoElementId);
             return true;
         } catch (err) {
-            let message = 'Lỗi: Không thể truy cập camera. Vui lòng cấp quyền và thử lại.';
-            if (err.name === 'NotAllowedError') {
-                message = 'Truy cập camera bị chặn bởi chính sách quyền. Vui lòng kiểm tra cài đặt trình duyệt hoặc liên hệ quản trị viên trang web.';
+            console.error('Camera access error:', err);
+            let message = 'Lỗi: Không thể truy cập camera.';
+
+            if (err.message === 'HTTPS_REQUIRED') {
+                message = 'Camera chỉ hoạt động trên HTTPS hoặc localhost. Vui lòng sử dụng HTTPS trong production.';
+            } else if (err.name === 'NotAllowedError') {
+                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong Windows Settings\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera';
+            } else if (err.name === 'NotFoundError') {
+                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart máy tính';
+            } else if (err.name === 'NotReadableError') {
+                message = 'Camera đang được sử dụng bởi ứng dụng khác hoặc bị lỗi hardware.';
+            } else if (err.name === 'OverconstrainedError') {
+                message = 'Camera không hỗ trợ độ phân giải yêu cầu. Đang thử với độ phân giải thấp hơn...';
+                // Try with lower constraints
+                try {
+                    const lowConstraints = {
+                        video: {
+                            facingMode,
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        },
+                        audio: false
+                    };
+                    this.cameraStream = await navigator.mediaDevices.getUserMedia(lowConstraints);
+                    const video = this.shadowRoot.getElementById(videoElementId);
+                    video.srcObject = this.cameraStream;
+                    video.style.display = 'block';
+                    video.style.transform = (facingMode === 'user') ? 'scaleX(-1)' : 'scaleX(1)';
+                    await new Promise(resolve => video.onloadedmetadata = resolve);
+                    this.startLiveValidation(videoElementId);
+                    return true;
+                } catch (retryErr) {
+                    message = 'Không thể truy cập camera ngay cả với độ phân giải thấp. Vui lòng kiểm tra camera.';
+                }
+            } else if (err.name === 'SecurityError') {
+                message = 'Lỗi bảo mật. Vui lòng:\n1. Sử dụng HTTPS\n2. Kiểm tra cài đặt bảo mật trình duyệt\n3. Tắt VPN nếu đang sử dụng';
+            } else if (err.name === 'AbortError') {
+                message = 'Quyền truy cập camera bị hủy. Vui lòng thử lại.';
+            } else {
+                message = `Lỗi truy cập camera: ${err.message}. Vui lòng kiểm tra cài đặt Windows và trình duyệt.`;
             }
+
             this.displayInitialError(message);
             return false;
         }
@@ -1300,14 +1355,31 @@ ReVerifier = class extends HTMLElement {
     // Core Camera and Validation Logic
     async startCamera(videoElementId, facingMode = 'user') {
         try {
+            // Check if we're on HTTPS or localhost
+            const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (!isSecure) {
+                throw new Error('HTTPS_REQUIRED');
+            }
+
+            // Check if mediaDevices is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('MEDIA_DEVICES_NOT_SUPPORTED');
+            }
+
             this.stopCamera();
-            this.cameraStream = await navigator.mediaDevices.getUserMedia({
+
+            // Try to get camera with specific constraints for Windows compatibility
+            const constraints = {
                 video: {
                     facingMode,
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
-                }
-            });
+                    width: { ideal: 1920, min: 640 },
+                    height: { ideal: 1080, min: 480 },
+                    frameRate: { ideal: 30, min: 15 }
+                },
+                audio: false
+            };
+
+            this.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
             const video = this.shadowRoot.getElementById(videoElementId);
             video.srcObject = this.cameraStream;
             video.style.display = 'block';
@@ -1317,10 +1389,48 @@ ReVerifier = class extends HTMLElement {
             this.startLiveValidation(videoElementId);
             return true;
         } catch (err) {
-            let message = 'Lỗi: Không thể truy cập camera. Vui lòng cấp quyền và thử lại.';
-            if (err.name === 'NotAllowedError') {
-                message = 'Truy cập camera bị chặn bởi chính sách quyền. Vui lòng kiểm tra cài đặt trình duyệt hoặc liên hệ quản trị viên trang web.';
+            console.error('Camera access error:', err);
+            let message = 'Lỗi: Không thể truy cập camera.';
+
+            if (err.message === 'HTTPS_REQUIRED') {
+                message = 'Camera chỉ hoạt động trên HTTPS hoặc localhost. Vui lòng sử dụng HTTPS trong production.';
+            } else if (err.name === 'NotAllowedError') {
+                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong Windows Settings\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera';
+            } else if (err.name === 'NotFoundError') {
+                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart máy tính';
+            } else if (err.name === 'NotReadableError') {
+                message = 'Camera đang được sử dụng bởi ứng dụng khác hoặc bị lỗi hardware.';
+            } else if (err.name === 'OverconstrainedError') {
+                message = 'Camera không hỗ trợ độ phân giải yêu cầu. Đang thử với độ phân giải thấp hơn...';
+                // Try with lower constraints
+                try {
+                    const lowConstraints = {
+                        video: {
+                            facingMode,
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        },
+                        audio: false
+                    };
+                    this.cameraStream = await navigator.mediaDevices.getUserMedia(lowConstraints);
+                    const video = this.shadowRoot.getElementById(videoElementId);
+                    video.srcObject = this.cameraStream;
+                    video.style.display = 'block';
+                    video.style.transform = (facingMode === 'user') ? 'scaleX(-1)' : 'scaleX(1)';
+                    await new Promise(resolve => video.onloadedmetadata = resolve);
+                    this.startLiveValidation(videoElementId);
+                    return true;
+                } catch (retryErr) {
+                    message = 'Không thể truy cập camera ngay cả với độ phân giải thấp. Vui lòng kiểm tra camera.';
+                }
+            } else if (err.name === 'SecurityError') {
+                message = 'Lỗi bảo mật. Vui lòng:\n1. Sử dụng HTTPS\n2. Kiểm tra cài đặt bảo mật trình duyệt\n3. Tắt VPN nếu đang sử dụng';
+            } else if (err.name === 'AbortError') {
+                message = 'Quyền truy cập camera bị hủy. Vui lòng thử lại.';
+            } else {
+                message = `Lỗi truy cập camera: ${err.message}. Vui lòng kiểm tra cài đặt Windows và trình duyệt.`;
             }
+
             this.displayInitialError(message);
             return false;
         }

@@ -217,9 +217,41 @@ document.querySelector('re-verifier')?.addEventListener('kyc-verification-comple
 - Ensure you're using client components in Next.js
 
 ### Camera Issues
-- Grant camera permissions
-- Use HTTPS in production
-- Check browser compatibility
+- Grant camera permissions when prompted by the browser
+- Use HTTPS in production (camera doesn't work on HTTP)
+- Check Windows Camera privacy settings
+- Ensure no other applications are using the camera
+- Update camera drivers if issues persist
+- Try restarting your computer
+
+#### Windows-specific Camera Issues:
+1. **Enable Camera in Windows Settings:**
+   - Go to Settings > Privacy & security > Camera
+   - Turn on "Camera access for this device"
+   - Turn on "Allow apps to access your camera"
+   - Allow camera access for your browser (Chrome/Edge/Firefox)
+
+2. **Browser Permissions:**
+   - Click the camera icon in the address bar
+   - Select "Allow" for camera access
+   - Refresh the page if needed
+
+3. **Disable Conflicting Software:**
+   - Temporarily disable antivirus software
+   - Close other video conferencing apps (Zoom, Teams, etc.)
+   - Check Windows Defender Firewall settings
+
+4. **Driver Updates:**
+   - Update camera drivers from Device Manager
+   - Check for Windows updates
+   - Test with a different camera if available
+
+5. **Browser-specific Fixes:**
+   - **Chrome:** chrome://settings/content/camera
+   - **Edge:** edge://settings/content/camera  
+   - **Firefox:** about:preferences#privacy
+
+If camera still doesn't work, try the component in an incognito/private window or different browser.
 
 ### API Issues
 - Verify API key is correct

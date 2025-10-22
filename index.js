@@ -1021,15 +1021,75 @@ KycVerifier = class extends HTMLElement {
     async requestCameraPermission() {
         try {
             console.log('Manually requesting camera permission...');
-            const testStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user', width: 640, height: 480 },
-                audio: false
-            });
-            console.log('Permission granted, stopping test stream');
-            testStream.getTracks().forEach(track => track.stop());
-            return true;
+
+            // First check current permission status
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    const permissionStatus = await navigator.permissions.query({ name: 'camera' });
+                    console.log('Current camera permission status:', permissionStatus.state);
+
+                    if (permissionStatus.state === 'denied') {
+                        alert('Camera permission đã bị từ chối. Vui lòng:\n\n1. Mở Windows Settings > Privacy & security > Camera\n2. Bật "Camera access for this device"\n3. Bật cho trình duyệt bạn đang dùng\n4. Refresh trang và thử lại\n\nHoặc:\n1. Nhấp vào biểu tượng ổ khóa/khoá trong thanh địa chỉ\n2. Chọn "Allow" cho Camera\n3. Refresh trang');
+                        return false;
+                    }
+                } catch (permError) {
+                    console.warn('Permissions API check failed:', permError);
+                }
+            }
+
+            // Try to get camera access with multiple attempts
+            let attempts = 0;
+            const maxAttempts = 3;
+
+            while (attempts < maxAttempts) {
+                attempts++;
+                console.log(`Camera permission attempt ${attempts}/${maxAttempts}`);
+
+                try {
+                    const testStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 640, min: 320 },
+                            height: { ideal: 480, min: 240 }
+                        },
+                        audio: false
+                    });
+
+                    console.log('Permission granted successfully!');
+                    testStream.getTracks().forEach(track => track.stop());
+                    alert('Camera permission đã được cấp! Bây giờ bạn có thể tiếp tục.');
+                    return true;
+
+                } catch (err) {
+                    console.error(`Attempt ${attempts} failed:`, err);
+
+                    if (err.name === 'NotAllowedError') {
+                        if (attempts === 1) {
+                            alert('Camera permission bị từ chối. Vui lòng:\n\n1. Nhấp vào biểu tượng camera (hoặc ổ khóa) trong thanh địa chỉ\n2. Chọn "Allow" hoặc "Cho phép"\n3. Sau đó nhấp "OK" để thử lại');
+                        } else if (attempts === 2) {
+                            alert('Vẫn chưa được cấp quyền. Hãy thử:\n\n1. Mở Windows Settings (Win + I)\n2. Tìm "Privacy & security" > "Camera"\n3. Bật camera cho trình duyệt\n4. Refresh trang (F5)\n\nSau đó nhấp "OK" để thử lại lần cuối');
+                        }
+                    } else if (err.name === 'NotFoundError') {
+                        alert('Không tìm thấy camera. Vui lòng:\n\n1. Kiểm tra camera có kết nối không\n2. Mở Camera app của Windows để test\n3. Restart máy tính nếu cần\n\nLỗi: ' + err.message);
+                        return false;
+                    } else {
+                        if (attempts === maxAttempts) {
+                            alert('Không thể truy cập camera. Lỗi: ' + err.message + '\n\nVui lòng kiểm tra cài đặt Windows và trình duyệt.');
+                            return false;
+                        }
+                    }
+
+                    // Wait a bit before retry
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+
+            return false;
         } catch (err) {
             console.error('Manual permission request failed:', err);
+            alert('Lỗi khi yêu cầu quyền camera: ' + err.message);
             throw err;
         }
     }

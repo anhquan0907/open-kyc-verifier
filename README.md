@@ -251,7 +251,33 @@ document.querySelector('re-verifier')?.addEventListener('kyc-verification-comple
    - **Edge:** edge://settings/content/camera  
    - **Firefox:** about:preferences#privacy
 
-If camera still doesn't work, try the component in an incognito/private window or different browser.
+#### Mobile Camera Issues:
+1. **Permissions Policy:**
+   - Ensure your HTML doesn't have restrictive permissions policy headers
+   - Remove or modify: `<meta http-equiv="Permissions-Policy" content="camera=()">`
+   - Use: `<meta http-equiv="Permissions-Policy" content="camera=(self)">`
+
+2. **HTTPS Requirement:**
+   - Camera requires HTTPS on mobile browsers
+   - Localhost works for development
+   - HTTP will fail on mobile devices
+
+3. **PWA Meta Tags:**
+   - Replace deprecated: `<meta name="apple-mobile-web-app-capable" content="yes">`
+   - Use: `<meta name="mobile-web-app-capable" content="yes">`
+
+4. **Browser Permissions:**
+   - Grant camera permission when prompted
+   - Check browser settings for camera access
+   - Try refreshing the page after granting permission
+
+5. **iOS Safari Specific:**
+   - Camera only works in fullscreen mode for some iOS versions
+   - Ensure proper viewport meta tag: `<meta name="viewport" content="width=device-width, initial-scale=1.0">`
+
+6. **Android Chrome:**
+   - May require additional permissions in Android settings
+   - Check "Site settings" in Chrome for camera permission
 
 ### API Issues
 - Verify API key is correct

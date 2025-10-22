@@ -447,6 +447,19 @@ KycVerifier = class extends HTMLElement {
                 throw new Error('MEDIA_DEVICES_NOT_SUPPORTED');
             }
 
+            // Check permissions policy
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    const permissionStatus = await navigator.permissions.query({ name: 'camera' });
+                    if (permissionStatus.state === 'denied') {
+                        throw new Error('PERMISSION_DENIED');
+                    }
+                } catch (permError) {
+                    // Permissions API might not be fully supported, continue anyway
+                    console.warn('Permissions API check failed:', permError);
+                }
+            }
+
             this.stopCamera();
 
             // Try to get camera with specific constraints for Windows compatibility
@@ -475,10 +488,12 @@ KycVerifier = class extends HTMLElement {
 
             if (err.message === 'HTTPS_REQUIRED') {
                 message = 'Camera chỉ hoạt động trên HTTPS hoặc localhost. Vui lòng sử dụng HTTPS trong production.';
+            } else if (err.message === 'PERMISSION_DENIED') {
+                message = 'Quyền truy cập camera đã bị từ chối trong cài đặt trình duyệt. Vui lòng:\n1. Kiểm tra cài đặt quyền camera\n2. Refresh trang và thử lại\n3. Kiểm tra Permissions Policy trong HTML';
             } else if (err.name === 'NotAllowedError') {
-                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong Windows Settings\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera';
+                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong thiết bị\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera\n4. Trên mobile: Kiểm tra Permissions Policy header';
             } else if (err.name === 'NotFoundError') {
-                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart máy tính';
+                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart thiết bị\n4. Trên mobile: Cho phép truy cập camera trong cài đặt';
             } else if (err.name === 'NotReadableError') {
                 message = 'Camera đang được sử dụng bởi ứng dụng khác hoặc bị lỗi hardware.';
             } else if (err.name === 'OverconstrainedError') {
@@ -505,11 +520,11 @@ KycVerifier = class extends HTMLElement {
                     message = 'Không thể truy cập camera ngay cả với độ phân giải thấp. Vui lòng kiểm tra camera.';
                 }
             } else if (err.name === 'SecurityError') {
-                message = 'Lỗi bảo mật. Vui lòng:\n1. Sử dụng HTTPS\n2. Kiểm tra cài đặt bảo mật trình duyệt\n3. Tắt VPN nếu đang sử dụng';
+                message = 'Lỗi bảo mật. Vui lòng:\n1. Sử dụng HTTPS\n2. Kiểm tra cài đặt bảo mật trình duyệt\n3. Tắt VPN nếu đang sử dụng\n4. Trên mobile: Kiểm tra Permissions Policy';
             } else if (err.name === 'AbortError') {
                 message = 'Quyền truy cập camera bị hủy. Vui lòng thử lại.';
             } else {
-                message = `Lỗi truy cập camera: ${err.message}. Vui lòng kiểm tra cài đặt Windows và trình duyệt.`;
+                message = `Lỗi truy cập camera: ${err.message}. Vui lòng kiểm tra cài đặt thiết bị và trình duyệt.`;
             }
 
             this.displayInitialError(message);
@@ -1366,6 +1381,19 @@ ReVerifier = class extends HTMLElement {
                 throw new Error('MEDIA_DEVICES_NOT_SUPPORTED');
             }
 
+            // Check permissions policy
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    const permissionStatus = await navigator.permissions.query({ name: 'camera' });
+                    if (permissionStatus.state === 'denied') {
+                        throw new Error('PERMISSION_DENIED');
+                    }
+                } catch (permError) {
+                    // Permissions API might not be fully supported, continue anyway
+                    console.warn('Permissions API check failed:', permError);
+                }
+            }
+
             this.stopCamera();
 
             // Try to get camera with specific constraints for Windows compatibility
@@ -1394,10 +1422,12 @@ ReVerifier = class extends HTMLElement {
 
             if (err.message === 'HTTPS_REQUIRED') {
                 message = 'Camera chỉ hoạt động trên HTTPS hoặc localhost. Vui lòng sử dụng HTTPS trong production.';
+            } else if (err.message === 'PERMISSION_DENIED') {
+                message = 'Quyền truy cập camera đã bị từ chối trong cài đặt trình duyệt. Vui lòng:\n1. Kiểm tra cài đặt quyền camera\n2. Refresh trang và thử lại\n3. Kiểm tra Permissions Policy trong HTML';
             } else if (err.name === 'NotAllowedError') {
-                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong Windows Settings\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera';
+                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Cho phép camera trong popup trình duyệt\n2. Kiểm tra cài đặt quyền camera trong thiết bị\n3. Đảm bảo không có ứng dụng khác đang sử dụng camera\n4. Trên mobile: Kiểm tra Permissions Policy header';
             } else if (err.name === 'NotFoundError') {
-                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart máy tính';
+                message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera\n3. Thử restart thiết bị\n4. Trên mobile: Cho phép truy cập camera trong cài đặt';
             } else if (err.name === 'NotReadableError') {
                 message = 'Camera đang được sử dụng bởi ứng dụng khác hoặc bị lỗi hardware.';
             } else if (err.name === 'OverconstrainedError') {
@@ -1424,11 +1454,11 @@ ReVerifier = class extends HTMLElement {
                     message = 'Không thể truy cập camera ngay cả với độ phân giải thấp. Vui lòng kiểm tra camera.';
                 }
             } else if (err.name === 'SecurityError') {
-                message = 'Lỗi bảo mật. Vui lòng:\n1. Sử dụng HTTPS\n2. Kiểm tra cài đặt bảo mật trình duyệt\n3. Tắt VPN nếu đang sử dụng';
+                message = 'Lỗi bảo mật. Vui lòng:\n1. Sử dụng HTTPS\n2. Kiểm tra cài đặt bảo mật trình duyệt\n3. Tắt VPN nếu đang sử dụng\n4. Trên mobile: Kiểm tra Permissions Policy';
             } else if (err.name === 'AbortError') {
                 message = 'Quyền truy cập camera bị hủy. Vui lòng thử lại.';
             } else {
-                message = `Lỗi truy cập camera: ${err.message}. Vui lòng kiểm tra cài đặt Windows và trình duyệt.`;
+                message = `Lỗi truy cập camera: ${err.message}. Vui lòng kiểm tra cài đặt thiết bị và trình duyệt.`;
             }
 
             this.displayInitialError(message);

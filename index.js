@@ -493,7 +493,18 @@ KycVerifier = class extends HTMLElement {
             } else if (err.message === 'PERMISSION_DENIED') {
                 message = 'Quyền truy cập camera đã bị từ chối trong cài đặt trình duyệt. Vui lòng:\n1. Kiểm tra cài đặt quyền camera\n2. Refresh trang và thử lại\n3. Kiểm tra Permissions Policy trong HTML';
             } else if (err.name === 'NotAllowedError') {
-                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Nhấp vào biểu tượng camera trong thanh địa chỉ trình duyệt\n2. Chọn "Allow" khi được hỏi\n3. Kiểm tra cài đặt camera trong Windows Settings > Privacy & security > Camera\n4. Đảm bảo camera không bị chặn bởi antivirus\n5. Thử refresh trang và thử lại';
+                // Check if this might be a Permissions Policy violation
+                const hasPermissionsPolicyViolation = err.message && (
+                    err.message.includes('Permissions policy') ||
+                    err.message.includes('Feature-Policy') ||
+                    err.message.includes('not allowed in this document')
+                );
+
+                if (hasPermissionsPolicyViolation) {
+                    message = 'Camera bị chặn bởi Permissions Policy. Vui lòng:\n\n1. Kiểm tra HTML của trang web có meta tag:\n   <meta http-equiv="Permissions-Policy" content="camera=()">\n   Nếu có, hãy xóa hoặc thay đổi thành camera=(self)\n\n2. Hoặc kiểm tra HTTP headers có:\n   Permissions-Policy: camera=()\n   Nếu có, hãy thay đổi thành camera=(self)\n\n3. Restart server và refresh trang\n\nĐây là cài đặt bảo mật của website, không phải trình duyệt.';
+                } else {
+                    message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Nhấp vào biểu tượng camera trong thanh địa chỉ trình duyệt\n2. Chọn "Allow" khi được hỏi\n3. Kiểm tra cài đặt camera trong Windows Settings > Privacy & security > Camera\n4. Đảm bảo camera không bị chặn bởi antivirus\n5. Thử refresh trang và thử lại';
+                }
             } else if (err.name === 'NotFoundError') {
                 message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera trong Device Manager\n3. Thử restart máy tính\n4. Kiểm tra Windows Camera app có hoạt động không';
             } else if (err.name === 'NotReadableError') {
@@ -1022,6 +1033,13 @@ KycVerifier = class extends HTMLElement {
         try {
             console.log('Manually requesting camera permission...');
 
+            // Check if we're on HTTPS or localhost
+            const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (!isSecure) {
+                alert('Camera chỉ hoạt động trên HTTPS hoặc localhost.\n\nNếu bạn đang test trên localhost, hãy đảm bảo URL là http://localhost hoặc http://127.0.0.1');
+                return false;
+            }
+
             // First check current permission status
             if (navigator.permissions && navigator.permissions.query) {
                 try {
@@ -1029,8 +1047,10 @@ KycVerifier = class extends HTMLElement {
                     console.log('Current camera permission status:', permissionStatus.state);
 
                     if (permissionStatus.state === 'denied') {
-                        alert('Camera permission đã bị từ chối. Vui lòng:\n\n1. Mở Windows Settings > Privacy & security > Camera\n2. Bật "Camera access for this device"\n3. Bật cho trình duyệt bạn đang dùng\n4. Refresh trang và thử lại\n\nHoặc:\n1. Nhấp vào biểu tượng ổ khóa/khoá trong thanh địa chỉ\n2. Chọn "Allow" cho Camera\n3. Refresh trang');
+                        alert('Camera permission đã bị từ chối. Vui lòng:\n\n1. Mở Windows Settings > Privacy & security > Camera\n2. Bật "Camera access for this device"\n3. Bật cho trình duyệt bạn đang dùng\n4. Refresh trang (Ctrl+F5) và thử lại\n\nHoặc:\n1. Nhấp vào biểu tượng ổ khóa/khoá trong thanh địa chỉ\n2. Chọn "Allow" cho Camera\n3. Refresh trang');
                         return false;
+                    } else if (permissionStatus.state === 'granted') {
+                        console.log('Permission already granted, but browser might still block. Trying direct access...');
                     }
                 } catch (permError) {
                     console.warn('Permissions API check failed:', permError);
@@ -1065,16 +1085,18 @@ KycVerifier = class extends HTMLElement {
 
                     if (err.name === 'NotAllowedError') {
                         if (attempts === 1) {
-                            alert('Camera permission bị từ chối. Vui lòng:\n\n1. Nhấp vào biểu tượng camera (hoặc ổ khóa) trong thanh địa chỉ\n2. Chọn "Allow" hoặc "Cho phép"\n3. Sau đó nhấp "OK" để thử lại');
+                            alert('Camera permission bị từ chối. Vui lòng:\n\n1. Nhấp vào biểu tượng camera (hoặc ổ khóa) trong thanh địa chỉ\n2. Chọn "Allow" hoặc "Cho phép"\n3. Sau đó nhấp "OK" để thử lại\n\nNếu đã làm rồi, hãy thử:\n- Refresh trang (Ctrl+F5)\n- Mở site trong cửa sổ ẩn danh (Incognito)');
                         } else if (attempts === 2) {
-                            alert('Vẫn chưa được cấp quyền. Hãy thử:\n\n1. Mở Windows Settings (Win + I)\n2. Tìm "Privacy & security" > "Camera"\n3. Bật camera cho trình duyệt\n4. Refresh trang (F5)\n\nSau đó nhấp "OK" để thử lại lần cuối');
+                            alert('Vẫn chưa được cấp quyền. Hãy thử:\n\n1. Mở Developer Tools (F12)\n2. Nhấp vào biểu tượng ổ khóa trong thanh địa chỉ\n3. Reset permissions cho site này\n4. Hoặc mở site trong cửa sổ ẩn danh\n\nSau đó nhấp "OK" để thử lại lần cuối');
+                        } else {
+                            alert('Camera vẫn bị block. Hãy thử:\n\n1. Mở Chrome/Edge trong cửa sổ ẩn danh (Ctrl+Shift+N)\n2. Truy cập lại site này\n3. Hoặc reset browser settings:\n   - Chrome: chrome://settings/content/camera\n   - Edge: edge://settings/content/camera\n\n4. Restart browser và thử lại');
                         }
                     } else if (err.name === 'NotFoundError') {
                         alert('Không tìm thấy camera. Vui lòng:\n\n1. Kiểm tra camera có kết nối không\n2. Mở Camera app của Windows để test\n3. Restart máy tính nếu cần\n\nLỗi: ' + err.message);
                         return false;
                     } else {
                         if (attempts === maxAttempts) {
-                            alert('Không thể truy cập camera. Lỗi: ' + err.message + '\n\nVui lòng kiểm tra cài đặt Windows và trình duyệt.');
+                            alert('Không thể truy cập camera. Lỗi: ' + err.message + '\n\nVui lòng thử:\n1. Restart browser\n2. Kiểm tra antivirus\n3. Thử browser khác (Chrome/Edge/Firefox)');
                             return false;
                         }
                     }
@@ -1416,6 +1438,8 @@ ReVerifier = class extends HTMLElement {
             <div class="loading-container">
                 <div class="loading-spinner"></div>
                 <p style="text-align:center; font-weight: bold; font-size: 1.1em; color: #007bff;">Đang tải dữ liệu</p>
+                <p style="text-align:center; font-size: 0.8em; color: #6c757d; margin-top: 10px;">Nếu camera không hoạt động, hãy thử nút dưới đây:</p>
+                <button type="button" class="action-button btn-secondary" onclick="this.getRootNode().host.requestCameraPermission().then(() => { this.getRootNode().host.renderContent(); }).catch(err => { console.error('Permission test failed:', err); alert('Camera permission failed. Check browser settings.'); })" style="margin-top: 10px; font-size: 12px; padding: 8px 16px;">Test Camera Permission</button>
             </div>`;
     }
 
@@ -1492,7 +1516,18 @@ ReVerifier = class extends HTMLElement {
             } else if (err.message === 'PERMISSION_DENIED') {
                 message = 'Quyền truy cập camera đã bị từ chối trong cài đặt trình duyệt. Vui lòng:\n1. Kiểm tra cài đặt quyền camera\n2. Refresh trang và thử lại\n3. Kiểm tra Permissions Policy trong HTML';
             } else if (err.name === 'NotAllowedError') {
-                message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Nhấp vào biểu tượng camera trong thanh địa chỉ trình duyệt\n2. Chọn "Allow" khi được hỏi\n3. Kiểm tra cài đặt camera trong Windows Settings > Privacy & security > Camera\n4. Đảm bảo camera không bị chặn bởi antivirus\n5. Thử refresh trang và thử lại';
+                // Check if this might be a Permissions Policy violation
+                const hasPermissionsPolicyViolation = err.message && (
+                    err.message.includes('Permissions policy') ||
+                    err.message.includes('Feature-Policy') ||
+                    err.message.includes('not allowed in this document')
+                );
+
+                if (hasPermissionsPolicyViolation) {
+                    message = 'Camera bị chặn bởi Permissions Policy. Vui lòng:\n\n1. Kiểm tra HTML của trang web có meta tag:\n   <meta http-equiv="Permissions-Policy" content="camera=()">\n   Nếu có, hãy xóa hoặc thay đổi thành camera=(self)\n\n2. Hoặc kiểm tra HTTP headers có:\n   Permissions-Policy: camera=()\n   Nếu có, hãy thay đổi thành camera=(self)\n\n3. Restart server và refresh trang\n\nĐây là cài đặt bảo mật của website, không phải trình duyệt.';
+                } else {
+                    message = 'Quyền truy cập camera bị từ chối. Vui lòng:\n1. Nhấp vào biểu tượng camera trong thanh địa chỉ trình duyệt\n2. Chọn "Allow" khi được hỏi\n3. Kiểm tra cài đặt camera trong Windows Settings > Privacy & security > Camera\n4. Đảm bảo camera không bị chặn bởi antivirus\n5. Thử refresh trang và thử lại';
+                }
             } else if (err.name === 'NotFoundError') {
                 message = 'Không tìm thấy camera. Vui lòng:\n1. Kiểm tra camera có kết nối đúng không\n2. Cập nhật driver camera trong Device Manager\n3. Thử restart máy tính\n4. Kiểm tra Windows Camera app có hoạt động không';
             } else if (err.name === 'NotReadableError') {
@@ -1886,6 +1921,94 @@ ReVerifier = class extends HTMLElement {
             this.renderInitialLoading();
         } else {
             this.renderNoApiKeyError();
+        }
+    }
+
+    // Add a method to manually request camera permission (for debugging Windows issues)
+    async requestCameraPermission() {
+        try {
+            console.log('Manually requesting camera permission...');
+
+            // Check if we're on HTTPS or localhost
+            const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            if (!isSecure) {
+                alert('Camera chỉ hoạt động trên HTTPS hoặc localhost.\n\nNếu bạn đang test trên localhost, hãy đảm bảo URL là http://localhost hoặc http://127.0.0.1');
+                return false;
+            }
+
+            // First check current permission status
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    const permissionStatus = await navigator.permissions.query({ name: 'camera' });
+                    console.log('Current camera permission status:', permissionStatus.state);
+
+                    if (permissionStatus.state === 'denied') {
+                        alert('Camera permission đã bị từ chối. Vui lòng:\n\n1. Mở Windows Settings > Privacy & security > Camera\n2. Bật "Camera access for this device"\n3. Bật cho trình duyệt bạn đang dùng\n4. Refresh trang (Ctrl+F5) và thử lại\n\nHoặc:\n1. Nhấp vào biểu tượng ổ khóa/khoá trong thanh địa chỉ\n2. Chọn "Allow" cho Camera\n3. Refresh trang');
+                        return false;
+                    } else if (permissionStatus.state === 'granted') {
+                        console.log('Permission already granted, but browser might still block. Trying direct access...');
+                    }
+                } catch (permError) {
+                    console.warn('Permissions API check failed:', permError);
+                }
+            }
+
+            // Try to get camera access with multiple attempts
+            let attempts = 0;
+            const maxAttempts = 3;
+
+            while (attempts < maxAttempts) {
+                attempts++;
+                console.log(`Camera permission attempt ${attempts}/${maxAttempts}`);
+
+                try {
+                    const testStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 640, min: 320 },
+                            height: { ideal: 480, min: 240 }
+                        },
+                        audio: false
+                    });
+
+                    console.log('Permission granted successfully!');
+                    testStream.getTracks().forEach(track => track.stop());
+                    alert('Camera permission đã được cấp! Bây giờ bạn có thể tiếp tục.');
+                    return true;
+
+                } catch (err) {
+                    console.error(`Attempt ${attempts} failed:`, err);
+
+                    if (err.name === 'NotAllowedError') {
+                        if (attempts === 1) {
+                            alert('Camera permission bị từ chối. Vui lòng:\n\n1. Nhấp vào biểu tượng camera (hoặc ổ khóa) trong thanh địa chỉ\n2. Chọn "Allow" hoặc "Cho phép"\n3. Sau đó nhấp "OK" để thử lại\n\nNếu đã làm rồi, hãy thử:\n- Refresh trang (Ctrl+F5)\n- Mở site trong cửa sổ ẩn danh (Incognito)');
+                        } else if (attempts === 2) {
+                            alert('Vẫn chưa được cấp quyền. Hãy thử:\n\n1. Mở Developer Tools (F12)\n2. Nhấp vào biểu tượng ổ khóa trong thanh địa chỉ\n3. Reset permissions cho site này\n4. Hoặc mở site trong cửa sổ ẩn danh\n\nSau đó nhấp "OK" để thử lại lần cuối');
+                        } else {
+                            alert('Camera vẫn bị block. Hãy thử:\n\n1. Mở Chrome/Edge trong cửa sổ ẩn danh (Ctrl+Shift+N)\n2. Truy cập lại site này\n3. Hoặc reset browser settings:\n   - Chrome: chrome://settings/content/camera\n   - Edge: edge://settings/content/camera\n\n4. Restart browser và thử lại');
+                        }
+                    } else if (err.name === 'NotFoundError') {
+                        alert('Không tìm thấy camera. Vui lòng:\n\n1. Kiểm tra camera có kết nối không\n2. Mở Camera app của Windows để test\n3. Restart máy tính nếu cần\n\nLỗi: ' + err.message);
+                        return false;
+                    } else {
+                        if (attempts === maxAttempts) {
+                            alert('Không thể truy cập camera. Lỗi: ' + err.message + '\n\nVui lòng thử:\n1. Restart browser\n2. Kiểm tra antivirus\n3. Thử browser khác (Chrome/Edge/Firefox)');
+                            return false;
+                        }
+                    }
+
+                    // Wait a bit before retry
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+
+            return false;
+        } catch (err) {
+            console.error('Manual permission request failed:', err);
+            alert('Lỗi khi yêu cầu quyền camera: ' + err.message);
+            throw err;
         }
     }
 }

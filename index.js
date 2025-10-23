@@ -881,7 +881,7 @@ KycVerifier = class extends HTMLElement {
                         </div>
                     </div>
                     <div class="button-group">
-                         <button type="button" class="action-button btn-primary" onclick="this.getRootNode().host.executeKYC()">✨ XÁC THỰC</button>
+                         <button type="button" class="action-button btn-primary" onclick="this.getRootNode().host.executeKYC()">XÁC THỰC</button>
                     </div>`;
                 stepContainer.innerHTML = html;
                 break;
@@ -1742,7 +1742,7 @@ ReVerifier = class extends HTMLElement {
         if (this.capturedImages.portrait) {
             // Show preview and verify button
             contentContainer.innerHTML = `
-                <p style="text-align:center; font-weight: bold;">Xác nhận ảnh chân dung</p>
+                <p style="text-align:center; color: #20b13fff; font-weight: bold;">Xác nhận ảnh chân dung</p>
                 <div class="camera-box">
                     <img id="portraitPreview" class="captured-preview" src="${this.capturedImages.portrait}" alt="Preview Chân dung" style="transform: scaleX(-1);">
                 </div>
@@ -1753,7 +1753,7 @@ ReVerifier = class extends HTMLElement {
         } else {
             // Show camera for capture
             contentContainer.innerHTML = `
-                <p style="text-align:center; font-weight: bold;">Chụp ảnh chân dung</p>
+                <p style="text-align:center; color: #6c757d; font-weight: bold;">Chụp ảnh chân dung</p>
                 <p style="text-align:center; font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">Vui lòng giữ khuôn mặt trong khung tròn</p>
                 <div class="camera-box">
                     <video id="portraitVideo" autoplay muted playsinline style="display: none;"></video>

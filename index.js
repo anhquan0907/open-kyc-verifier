@@ -29,17 +29,6 @@ KycVerifier = class extends HTMLElement {
         this.faceCascadeLoaded = false;
         this.hasInitialized = false;
 
-        // Liveness detection variables
-        this.livenessState = {
-            requiredGesture: null, // 'smile' or 'blink'
-            gestureDetected: false,
-            gestureStartTime: null,
-            lastEyeRatio: null,
-            blinkCount: 0,
-            smileCount: 0,
-            gestureTimeout: 10000 // 10 seconds to perform gesture
-        };
-
         this.shadowRoot.innerHTML = `
             <style>
                 :host {
@@ -151,8 +140,10 @@ KycVerifier = class extends HTMLElement {
                     justify-content: center;
                 }
                 .portrait-box {
-                    width: 85%;
-                    height: 300px;
+                    width: 240px;
+                    height: 240px;
+                    border-radius: 50%;
+                    margin: 15px auto;
                 }
                 .camera-box video, .camera-box .captured-preview {
                     width: 100%;
@@ -595,7 +586,7 @@ KycVerifier = class extends HTMLElement {
         const centerY = canvas.height / 2;
 
         if (type === 'portrait') { // Perfect circle for portrait
-            const radius = Math.min(canvas.width, canvas.height) * 0.5;
+            const radius = Math.min(canvas.width, canvas.height) * 0.55;
             ctx.beginPath();
             ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
             ctx.stroke();
@@ -614,6 +605,10 @@ KycVerifier = class extends HTMLElement {
 
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+        let stableStartTime = null;
+        let lastFacePosition = null;
+        const STABLE_THRESHOLD = 3000; // 2 seconds
 
         let src;
         if (this.currentStep === 1) {
@@ -650,18 +645,80 @@ KycVerifier = class extends HTMLElement {
                 const result = this.validatePortrait(src);
                 isValid = result.isValid;
                 message = result.message;
+                const faceRect = result.faceRect;
+
+                if (isValid && faceRect) {
+                    if (lastFacePosition) {
+                        const deltaX = Math.abs(faceRect.x - lastFacePosition.x);
+                        const deltaY = Math.abs(faceRect.y - lastFacePosition.y);
+                        const deltaW = Math.abs(faceRect.width - lastFacePosition.width);
+                        const deltaH = Math.abs(faceRect.height - lastFacePosition.height);
+
+                        if (deltaX < 70 && deltaY < 70 && deltaW < 70 && deltaH < 70) {
+                            if (stableStartTime === null) {
+                                stableStartTime = performance.now();
+                            }
+                            const elapsed = performance.now() - stableStartTime;
+                            const progress = Math.min(elapsed / STABLE_THRESHOLD * 100, 100);
+                            this.updateProgress(progress);
+
+                            if (elapsed >= STABLE_THRESHOLD) {
+                                this.autoCapture(videoId);
+                                return; // stop processing
+                            }
+                        } else {
+                            stableStartTime = null;
+                            this.updateProgress(0);
+                        }
+                    }
+                    lastFacePosition = faceRect;
+                } else {
+                    stableStartTime = null;
+                    this.updateProgress(0);
+                    lastFacePosition = null;
+                }
             }
 
             const overlayType = this.currentStep === 1 ? 'id' : 'portrait';
             this.drawOverlay(canvasId, overlayType, isValid ? 'valid' : 'invalid');
             validationMsg.textContent = message;
             validationMsg.className = `validation-message ${isValid ? 'success' : 'error'}`;
-            captureBtn.disabled = !isValid;
+            if (captureBtn) captureBtn.disabled = !isValid;
 
             this.validationIntervalId = requestAnimationFrame(processFrame);
         };
 
         this.validationIntervalId = requestAnimationFrame(processFrame);
+    }
+
+    updateProgress(percent) {
+        const progressRingContainer = this.shadowRoot.getElementById('progressRingContainer');
+        const progressRing = this.shadowRoot.getElementById('progressRing');
+        const progressText = this.shadowRoot.getElementById('progressText');
+        const progressContainer = this.shadowRoot.getElementById('progressContainer');
+        if (progressContainer) {
+            progressContainer.style.display = 'block';
+            if (progressRingContainer) progressRingContainer.style.display = 'block';
+            if (progressRing) {
+                const circumference = 2 * Math.PI * 110;
+                const dash = (percent / 100) * circumference;
+                progressRing.style.strokeDasharray = `${dash} ${circumference - dash}`;
+            }
+            if (progressText) progressText.textContent = percent < 100 ? `Giữ khuôn mặt ổn định... ${Math.round(percent)}%` : 'Đang chụp...';
+        } else {
+            if (progressRingContainer) progressRingContainer.style.display = 'none';
+        }
+    }
+
+    autoCapture(videoId) {
+        const imageData = this.captureImage('portrait', videoId);
+        if (imageData) {
+            this.capturedImages.portrait = imageData;
+            this.stopCamera();
+            // Tự động chuyển sang bước xác thực
+            this.currentStep = 3;
+            this.executeKYC();
+        }
     }
 
     validateIdCardBounds(src) {
@@ -723,9 +780,11 @@ KycVerifier = class extends HTMLElement {
 
         let isValid = false;
         let message = 'Không tìm thấy khuôn mặt';
+        let faceRect = null;
 
         if (faces.size() === 1) {
             const face = faces.get(0);
+            faceRect = { x: face.x, y: face.y, width: face.width, height: face.height };
 
             // Use circular validation area
             const circleCenterX = src.cols / 2;
@@ -747,7 +806,7 @@ KycVerifier = class extends HTMLElement {
 
             if (isSizeValid && isCentered) {
                 isValid = true;
-                message = 'Khuôn mặt hợp lệ! Sẵn sàng chụp.';
+                message = 'Vui lòng giữ nguyên vị trí';
             } else if (!isSizeValid) {
                 message = 'Vui lòng di chuyển lại gần hơn';
             } else {
@@ -760,107 +819,7 @@ KycVerifier = class extends HTMLElement {
 
         gray.delete(); faces.delete();
 
-        return { isValid, message };
-    }
-
-    detectLivenessGesture(src, face) {
-        if (this.livenessState.requiredGesture === 'smile') {
-            return this.detectSmile(src, face);
-        } else if (this.livenessState.requiredGesture === 'blink') {
-            return this.detectBlink(src, face);
-        }
-        return false;
-    }
-
-    detectSmile(src, face) {
-        // Simple smile detection based on mouth region brightness and shape
-        // This is a basic implementation - in production, you'd want more sophisticated facial landmark detection
-
-        const mouthY = face.y + face.height * 0.7;
-        const mouthHeight = face.height * 0.2;
-        const mouthX = face.x + face.width * 0.3;
-        const mouthWidth = face.width * 0.4;
-
-        // Extract mouth region
-        const mouthRect = new cv.Rect(
-            Math.max(0, mouthX),
-            Math.max(0, mouthY),
-            Math.min(mouthWidth, src.cols - mouthX),
-            Math.min(mouthHeight, src.rows - mouthY)
-        );
-
-        if (mouthRect.width <= 0 || mouthRect.height <= 0) return false;
-
-        const mouthROI = src.roi(mouthRect);
-        const mean = cv.mean(mouthROI);
-        const brightness = mean[0]; // Use grayscale brightness
-
-        // Calculate mouth aspect ratio (width/height)
-        const aspectRatio = mouthRect.width / mouthRect.height;
-
-        // Smile detection: brighter mouth region and wider aspect ratio
-        const isSmile = brightness > 120 && aspectRatio > 1.8;
-
-        if (isSmile) {
-            this.livenessState.smileCount++;
-            if (this.livenessState.smileCount >= 3) { // Require 3 consecutive smile detections
-                this.livenessState.gestureDetected = true;
-                return true;
-            }
-        } else {
-            this.livenessState.smileCount = Math.max(0, this.livenessState.smileCount - 1);
-        }
-
-        mouthROI.delete();
-        return false;
-    }
-
-    detectBlink(src, face) {
-        // Simple blink detection based on eye region analysis
-        // This looks for significant changes in eye region brightness/darkness
-
-        const eyeY = face.y + face.height * 0.25;
-        const eyeHeight = face.height * 0.25;
-        const eyeX = face.x + face.width * 0.25;
-        const eyeWidth = face.width * 0.5;
-
-        const eyeRect = new cv.Rect(
-            Math.max(0, eyeX),
-            Math.max(0, eyeY),
-            Math.min(eyeWidth, src.cols - eyeX),
-            Math.min(eyeHeight, src.rows - eyeY)
-        );
-
-        if (eyeRect.width <= 0 || eyeRect.height <= 0) return false;
-
-        const eyeROI = src.roi(eyeRect);
-        const mean = cv.mean(eyeROI);
-        const currentBrightness = mean[0];
-
-        // Initialize last brightness if not set
-        if (this.livenessState.lastEyeRatio === null) {
-            this.livenessState.lastEyeRatio = currentBrightness;
-            eyeROI.delete();
-            return false;
-        }
-
-        // Calculate brightness change ratio
-        const brightnessChange = Math.abs(currentBrightness - this.livenessState.lastEyeRatio);
-        const changeRatio = brightnessChange / this.livenessState.lastEyeRatio;
-
-        // Detect blink: significant brightness increase (eye opens) after being dark
-        if (changeRatio > 0.3 && currentBrightness > this.livenessState.lastEyeRatio) {
-            this.livenessState.blinkCount++;
-            if (this.livenessState.blinkCount >= 2) { // Require 2 blink detections
-                this.livenessState.gestureDetected = true;
-                eyeROI.delete();
-                return true;
-            }
-        }
-
-        this.livenessState.lastEyeRatio = currentBrightness;
-        eyeROI.delete();
-        return false;
+        return { isValid, message, faceRect };
     }
 
     captureImage(type, videoElementId) {
@@ -885,13 +844,6 @@ KycVerifier = class extends HTMLElement {
     handleCaptureOrRetake(type, videoId) {
         if (this.capturedImages[type]) {
             this.capturedImages[type] = null;
-            // Reset liveness state when retaking photo
-            this.livenessState.requiredGesture = null;
-            this.livenessState.gestureDetected = false;
-            this.livenessState.gestureStartTime = null;
-            this.livenessState.lastEyeRatio = null;
-            this.livenessState.blinkCount = 0;
-            this.livenessState.smileCount = 0;
             this.renderStep();
         } else {
             const imageData = this.captureImage(type, videoId);
@@ -961,22 +913,23 @@ KycVerifier = class extends HTMLElement {
 
             case 2:
                 const type2 = 'portrait';
-                const gestureInstruction = this.livenessState.requiredGesture ?
-                    (this.livenessState.requiredGesture === 'smile' ? 'Vui lòng cười để xác nhận bạn là người thật' : 'Vui lòng chớp mắt để xác nhận bạn là người thật') :
-                    'Vui lòng giữ khuôn mặt trong khung tròn';
-
                 html = `
                     <p style="text-align:center; font-weight: bold;">Bước 2: Chụp Ảnh Chân Dung</p>
-                    <p style="text-align:center; font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">${gestureInstruction}</p>
                     <div class="camera-box portrait-box">
                         <video id="step2Video" autoplay muted playsinline style="display: none;"></video>
                         <canvas id="step2CanvasOverlay" class="overlay"></canvas>
+                        <div id="progressRingContainer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; display: none;">
+                            <svg width="100%" height="100%" viewBox="0 0 240 240">
+                                <circle cx="120" cy="120" r="110" stroke="#ddd" stroke-width="10" fill="none" opacity="0.5"/>
+                                <circle id="progressRing" cx="120" cy="120" r="110" stroke="#28a745" stroke-width="10" fill="none" stroke-dasharray="0 691.15" stroke-dashoffset="345.575" transform="rotate(-90 120 120)"/>
+                            </svg>
+                        </div>
                         <img id="${type2}Preview" class="captured-preview" style="display: ${this.capturedImages[type2] ? 'block' : 'none'};" src="${this.capturedImages[type2] || ''}" alt="Preview Chân dung">
                     </div>
                      <div id="validationMessage" class="validation-message error"></div>
-                    <div style="text-align: center; margin: 10px 0;">
-                        <button type="button" class="action-button btn-success capture-btn" id="${type2}CaptureBtn" onclick="this.getRootNode().host.handleCaptureOrRetake('${type2}', 'step2Video')" disabled><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="white"/></svg></button>
-                    </div>
+                     <div id="progressContainer" style="display: none; text-align: center; margin: 10px 0;">
+                         <p id="progressText" style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">Giữ khuôn mặt ổn định...</p>
+                     </div>
                     <div class="button-group">
                         <button type="button" class="action-button btn-secondary" onclick="this.getRootNode().host.prevStep()">Quay Lại</button>
                         <button type="button" class="action-button btn-primary" id="${type2}NextBtn" onclick="this.getRootNode().host.nextStep()" ${!this.capturedImages[type2] ? 'disabled' : ''}>Tiếp Tục</button>
@@ -1042,8 +995,7 @@ KycVerifier = class extends HTMLElement {
         stepContainer.innerHTML = `
             <div class="loading-container">
                 <div class="loading-spinner"></div>
-                <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Đang xử lý xác thực...</p>
-                <p style="text-align:center; color: var(--dark-gray);">Vui lòng không đóng trình duyệt.</p>
+                <p style="text-align:center; color: green; font-weight: bold; font-size: 1.1em;">Đang xử lý xác thực...</p>
             </div>`;
 
         const cleanBase64 = (dataUrl) => dataUrl.split(',')[1];
@@ -1268,17 +1220,6 @@ ReVerifier = class extends HTMLElement {
         this.faceCascadeLoaded = false;
         this.hasInitialized = false;
 
-        // Liveness detection variables
-        this.livenessState = {
-            requiredGesture: null, // 'smile' or 'blink'
-            gestureDetected: false,
-            gestureStartTime: null,
-            lastEyeRatio: null,
-            blinkCount: 0,
-            smileCount: 0,
-            gestureTimeout: 10000 // 10 seconds to perform gesture
-        };
-
         this.shadowRoot.innerHTML = `
             <style>
                 :host {
@@ -1319,10 +1260,10 @@ ReVerifier = class extends HTMLElement {
                 /* --- Camera/Preview Styles --- */
                 .camera-box {
                     position: relative;
-                    width: 100%;
-                    height: 300px;
+                    width: 240px;
+                    height: 240px;
                     margin: 15px auto 10px;
-                    border-radius: 12px;
+                    border-radius: 50%;
                     overflow: hidden;
                     background-color: #111;
                     display: flex;
@@ -1741,7 +1682,7 @@ ReVerifier = class extends HTMLElement {
         const centerY = canvas.height / 2;
 
         // Perfect circle for portrait
-        const radius = Math.min(canvas.width, canvas.height) * 0.4;
+        const radius = Math.min(canvas.width, canvas.height) * 0.55;
         ctx.beginPath();
         ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         ctx.stroke();
@@ -1755,6 +1696,10 @@ ReVerifier = class extends HTMLElement {
 
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+        let stableStartTime = null;
+        let lastFacePosition = null;
+        const STABLE_THRESHOLD = 2000; // 2 seconds
 
         // Draw initial overlay
         this.drawOverlay(canvasId, 'invalid');
@@ -1775,17 +1720,78 @@ ReVerifier = class extends HTMLElement {
             const result = this.validatePortrait(src);
             const isValid = result.isValid;
             const message = result.message;
+            const faceRect = result.faceRect;
+
+            if (isValid && faceRect) {
+                if (lastFacePosition) {
+                    const deltaX = Math.abs(faceRect.x - lastFacePosition.x);
+                    const deltaY = Math.abs(faceRect.y - lastFacePosition.y);
+                    const deltaW = Math.abs(faceRect.width - lastFacePosition.width);
+                    const deltaH = Math.abs(faceRect.height - lastFacePosition.height);
+
+                    if (deltaX < 70 && deltaY < 70 && deltaW < 70 && deltaH < 70) {
+                        if (stableStartTime === null) {
+                            stableStartTime = performance.now();
+                        }
+                        const elapsed = performance.now() - stableStartTime;
+                        const progress = Math.min(elapsed / STABLE_THRESHOLD * 100, 100);
+                        this.updateProgress(progress);
+
+                        if (elapsed >= STABLE_THRESHOLD) {
+                            this.autoCapture(videoId);
+                            return; // stop processing
+                        }
+                    } else {
+                        stableStartTime = null;
+                        this.updateProgress(0);
+                    }
+                }
+                lastFacePosition = faceRect;
+            } else {
+                stableStartTime = null;
+                this.updateProgress(0);
+                lastFacePosition = null;
+            }
 
             this.drawOverlay(canvasId, isValid ? 'valid' : 'invalid');
             validationMsg.textContent = message;
             validationMsg.className = `validation-message ${isValid ? 'success' : 'error'}`;
-            captureBtn.disabled = !isValid;
+            if (captureBtn) captureBtn.disabled = !isValid;
 
             src.delete();
             this.validationIntervalId = requestAnimationFrame(processFrame);
         };
 
         this.validationIntervalId = requestAnimationFrame(processFrame);
+    }
+
+    updateProgress(percent) {
+        const progressRingContainer = this.shadowRoot.getElementById('progressRingContainer');
+        const progressRing = this.shadowRoot.getElementById('progressRing');
+        const progressText = this.shadowRoot.getElementById('progressText');
+        const progressContainer = this.shadowRoot.getElementById('progressContainer');
+        if (progressContainer) {
+            progressContainer.style.display = 'block';
+            if (progressRingContainer) progressRingContainer.style.display = 'block';
+            if (progressRing) {
+                const circumference = 2 * Math.PI * 110;
+                const dash = (percent / 100) * circumference;
+                progressRing.style.strokeDasharray = `${dash} ${circumference - dash}`;
+            }
+            if (progressText) progressText.textContent = percent < 100 ? `Giữ khuôn mặt ổn định... ${Math.round(percent)}%` : 'Đang chụp...';
+        } else {
+            if (progressRingContainer) progressRingContainer.style.display = 'none';
+        }
+    }
+
+    autoCapture(videoId) {
+        const imageData = this.captureImage(videoId);
+        if (imageData) {
+            this.capturedImages.portrait = imageData;
+            this.stopCamera();
+            // Tự động gửi xác thực
+            this.executeReVerification();
+        }
     }
 
     validatePortrait(src) {
@@ -1796,9 +1802,11 @@ ReVerifier = class extends HTMLElement {
 
         let isValid = false;
         let message = 'Không tìm thấy khuôn mặt';
+        let faceRect = null;
 
         if (faces.size() === 1) {
             const face = faces.get(0);
+            faceRect = { x: face.x, y: face.y, width: face.width, height: face.height };
 
             // Use circular validation area
             const circleCenterX = src.cols / 2;
@@ -1807,7 +1815,7 @@ ReVerifier = class extends HTMLElement {
 
             // Check if face fits within the circle
             const faceSize = Math.max(face.width, face.height);
-            const isSizeValid = faceSize > circleRadius * 0.8;
+            const isSizeValid = faceSize > circleRadius * 0.6;
 
             // Check if face center is within the circle
             const faceCenterX = face.x + face.width / 2;
@@ -1816,151 +1824,24 @@ ReVerifier = class extends HTMLElement {
                 Math.pow(faceCenterX - circleCenterX, 2) +
                 Math.pow(faceCenterY - circleCenterY, 2)
             );
-            const isCentered = distanceFromCenter < circleRadius * 0.3;
+            const isCentered = distanceFromCenter < circleRadius * 0.4;
 
             if (isSizeValid && isCentered) {
-                // Initialize liveness detection if not started
-                if (!this.livenessState.requiredGesture) {
-                    this.livenessState.requiredGesture = Math.random() < 0.5 ? 'smile' : 'blink';
-                    this.livenessState.gestureStartTime = Date.now();
-                    this.livenessState.gestureDetected = false;
-                    this.livenessState.blinkCount = 0;
-                    this.livenessState.smileCount = 0;
-                }
-
-                // Check if gesture timeout has expired
-                if (Date.now() - this.livenessState.gestureStartTime > this.livenessState.gestureTimeout) {
-                    // Reset and try different gesture
-                    this.livenessState.requiredGesture = this.livenessState.requiredGesture === 'smile' ? 'blink' : 'smile';
-                    this.livenessState.gestureStartTime = Date.now();
-                    this.livenessState.gestureDetected = false;
-                    this.livenessState.blinkCount = 0;
-                    this.livenessState.smileCount = 0;
-                }
-
-                // Perform liveness detection
-                const livenessResult = this.detectLivenessGesture(src, face);
-
-                if (this.livenessState.gestureDetected) {
-                    isValid = true;
-                    message = 'Cử chỉ hợp lệ! Sẵn sàng chụp.';
-                } else {
-                    const gestureText = this.livenessState.requiredGesture === 'smile' ? 'cười' : 'chớp mắt';
-                    message = `Vui lòng ${gestureText} để xác nhận bạn là người thật`;
-                }
+                isValid = true;
+                message = 'Vui lòng giữ nguyên vị trí';
             } else if (!isSizeValid) {
                 message = 'Vui lòng di chuyển lại gần hơn';
             } else {
-                message = 'Vui lòng giữ khuôn mặt ở giữa khung';
+                message = 'Giữ khuôn mặt vào giữa khung';
             }
 
         } else if (faces.size() > 1) {
-            message = 'Phát hiện nhiều hơn một khuôn mặt';
+            message = 'Có nhiều hơn một khuôn mặt';
         }
 
         gray.delete(); faces.delete();
 
-        return { isValid, message };
-    }
-
-    detectLivenessGesture(src, face) {
-        if (this.livenessState.requiredGesture === 'smile') {
-            return this.detectSmile(src, face);
-        } else if (this.livenessState.requiredGesture === 'blink') {
-            return this.detectBlink(src, face);
-        }
-        return false;
-    }
-
-    detectSmile(src, face) {
-        // Simple smile detection based on mouth region brightness and shape
-        // This is a basic implementation - in production, you'd want more sophisticated facial landmark detection
-
-        const mouthY = face.y + face.height * 0.7;
-        const mouthHeight = face.height * 0.2;
-        const mouthX = face.x + face.width * 0.3;
-        const mouthWidth = face.width * 0.4;
-
-        // Extract mouth region
-        const mouthRect = new cv.Rect(
-            Math.max(0, mouthX),
-            Math.max(0, mouthY),
-            Math.min(mouthWidth, src.cols - mouthX),
-            Math.min(mouthHeight, src.rows - mouthY)
-        );
-
-        if (mouthRect.width <= 0 || mouthRect.height <= 0) return false;
-
-        const mouthROI = src.roi(mouthRect);
-        const mean = cv.mean(mouthROI);
-        const brightness = mean[0]; // Use grayscale brightness
-
-        // Calculate mouth aspect ratio (width/height)
-        const aspectRatio = mouthRect.width / mouthRect.height;
-
-        // Smile detection: brighter mouth region and wider aspect ratio
-        const isSmile = brightness > 120 && aspectRatio > 1.8;
-
-        if (isSmile) {
-            this.livenessState.smileCount++;
-            if (this.livenessState.smileCount >= 3) { // Require 3 consecutive smile detections
-                this.livenessState.gestureDetected = true;
-                return true;
-            }
-        } else {
-            this.livenessState.smileCount = Math.max(0, this.livenessState.smileCount - 1);
-        }
-
-        mouthROI.delete();
-        return false;
-    }
-
-    detectBlink(src, face) {
-        // Simple blink detection based on eye region analysis
-        // This looks for significant changes in eye region brightness/darkness
-
-        const eyeY = face.y + face.height * 0.25;
-        const eyeHeight = face.height * 0.25;
-        const eyeX = face.x + face.width * 0.25;
-        const eyeWidth = face.width * 0.5;
-
-        const eyeRect = new cv.Rect(
-            Math.max(0, eyeX),
-            Math.max(0, eyeY),
-            Math.min(eyeWidth, src.cols - eyeX),
-            Math.min(eyeHeight, src.rows - eyeY)
-        );
-
-        if (eyeRect.width <= 0 || eyeRect.height <= 0) return false;
-
-        const eyeROI = src.roi(eyeRect);
-        const mean = cv.mean(eyeROI);
-        const currentBrightness = mean[0];
-
-        // Initialize last brightness if not set
-        if (this.livenessState.lastEyeRatio === null) {
-            this.livenessState.lastEyeRatio = currentBrightness;
-            eyeROI.delete();
-            return false;
-        }
-
-        // Calculate brightness change ratio
-        const brightnessChange = Math.abs(currentBrightness - this.livenessState.lastEyeRatio);
-        const changeRatio = brightnessChange / this.livenessState.lastEyeRatio;
-
-        // Detect blink: significant brightness increase (eye opens) after being dark
-        if (changeRatio > 0.3 && currentBrightness > this.livenessState.lastEyeRatio) {
-            this.livenessState.blinkCount++;
-            if (this.livenessState.blinkCount >= 2) { // Require 2 blink detections
-                this.livenessState.gestureDetected = true;
-                eyeROI.delete();
-                return true;
-            }
-        }
-
-        this.livenessState.lastEyeRatio = currentBrightness;
-        eyeROI.delete();
-        return false;
+        return { isValid, message, faceRect };
     }
 
     captureImage(videoElementId) {
@@ -1984,13 +1865,6 @@ ReVerifier = class extends HTMLElement {
     handleCaptureOrRetake(videoId) {
         if (this.capturedImages.portrait) {
             this.capturedImages.portrait = null;
-            // Reset liveness state when retaking photo
-            this.livenessState.requiredGesture = null;
-            this.livenessState.gestureDetected = false;
-            this.livenessState.gestureStartTime = null;
-            this.livenessState.lastEyeRatio = null;
-            this.livenessState.blinkCount = 0;
-            this.livenessState.smileCount = 0;
             this.renderContent();
         } else {
             const imageData = this.captureImage(videoId);
@@ -2002,7 +1876,6 @@ ReVerifier = class extends HTMLElement {
         }
     }
 
-    // UI Rendering
     renderContent() {
         const contentContainer = this.shadowRoot.getElementById('content-container');
         this.stopCamera();
@@ -2020,25 +1893,22 @@ ReVerifier = class extends HTMLElement {
                 </div>`;
         } else {
             // Show camera for capture
-            const gestureInstruction = this.livenessState.requiredGesture ?
-                (this.livenessState.requiredGesture === 'smile' ? 'Vui lòng cười để xác nhận bạn là người thật' : 'Vui lòng chớp mắt để xác nhận bạn là người thật') :
-                'Vui lòng giữ khuôn mặt trong khung tròn';
-
             contentContainer.innerHTML = `
                 <p style="text-align:center; color: #6c757d; font-weight: bold;">Chụp ảnh chân dung</p>
-                <p style="text-align:center; font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">${gestureInstruction}</p>
+                <p style="text-align:center; font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">Vui lòng giữ khuôn mặt trong khung tròn</p>
                 <div class="camera-box">
                     <video id="portraitVideo" autoplay muted playsinline style="display: none;"></video>
                     <canvas id="portraitCanvasOverlay" class="overlay"></canvas>
+                    <div id="progressRingContainer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; display: none;">
+                        <svg width="100%" height="100%" viewBox="0 0 240 240">
+                            <circle cx="120" cy="120" r="110" stroke="#ddd" stroke-width="10" fill="none" opacity="0.5"/>
+                            <circle id="progressRing" cx="120" cy="120" r="110" stroke="#28a745" stroke-width="10" fill="none" stroke-dasharray="0 691.15" stroke-dashoffset="345.575" transform="rotate(-90 120 120)"/>
+                        </svg>
+                    </div>
                 </div>
                 <div id="validationMessage" class="validation-message error"></div>
-                <div style="text-align: center; margin: 10px 0;">
-                    <button type="button" class="action-button btn-success capture-btn" id="portraitCaptureBtn" onclick="this.getRootNode().host.handleCaptureOrRetake('portraitVideo')" disabled>
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="12" cy="12" r="10" stroke="white" stroke-width="2"/>
-                            <circle cx="12" cy="12" r="3" fill="white"/>
-                        </svg>
-                    </button>
+                <div id="progressContainer" style="display: none; text-align: center; margin: 10px 0;">
+                    <p id="progressText" style="font-size: 0.9em; color: #6c757d; margin-top: 5px;">Giữ khuôn mặt ổn định...</p>
                 </div>`;
             this.startCamera('portraitVideo', 'user');
         }
@@ -2074,8 +1944,7 @@ ReVerifier = class extends HTMLElement {
         contentContainer.innerHTML = `
             <div class="loading-container">
                 <div class="loading-spinner"></div>
-                <p style="text-align:center; font-weight: bold; font-size: 1.1em;">Đang xử lý xác thực...</p>
-                <p style="text-align:center; color: var(--dark-gray);">Vui lòng không đóng trình duyệt.</p>
+                <p style="text-align:center; color: green; font-weight: bold; font-size: 1.1em;">Đang xử lý xác thực...</p>
             </div>`;
 
         const cleanBase64 = (dataUrl) => dataUrl.split(',')[1];
